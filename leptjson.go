@@ -2,6 +2,8 @@ package leptjson
 
 import (
 	"errors"
+	"math"
+	"strconv"
 )
 
 var (
@@ -21,6 +23,8 @@ const (
 	LeptParseInvalidValue
 	// LeptParseRootNotSingular root not singular
 	LeptParseRootNotSingular
+	// LeptParseNumberTooBig number is to big
+	LeptParseNumberTooBig
 )
 
 // LeptType enums of json type
@@ -46,6 +50,7 @@ const (
 // LeptValue hold the value
 type LeptValue struct {
 	typ LeptType
+	n   float64
 }
 
 // LeptContext hold the input string
@@ -122,6 +127,196 @@ func LeptParseFalse(c *LeptContext, v *LeptValue) int {
 	return LeptParseOK
 }
 
+// LeptParseLiteral merge null true false
+func LeptParseLiteral(c *LeptContext, v *LeptValue, literal string, typ LeptType) int {
+	expect(c, literal[0])
+	n := len(c.json)
+	want := len(literal)
+	if n < want-1 {
+		return LeptParseInvalidValue
+	}
+	for i := 0; i < want-1; i++ {
+		if c.json[i] != literal[i+1] {
+			return LeptParseInvalidValue
+		}
+	}
+	c.json = c.json[want-1:]
+	v.typ = typ
+	return LeptParseOK
+}
+
+// LeptParseNumber use to parse "Number"
+func LeptParseNumber(c *LeptContext, v *LeptValue) int {
+	var end string
+	var err error
+	v.n, end, err = strtod(c.json)
+	if err != nil {
+		return LeptParseInvalidValue
+	}
+	c.json = end
+	v.typ = LeptNUMBER
+	return LeptParseOK
+}
+
+// strtod use to parse input string to a number
+func strtod(input string) (float64, string, error) {
+	// number = [ "-" ] int [ frac ] [ exp ]
+	// int = "0" / digit1-9 *digit
+	// frac = "." 1*digit
+	// exp = ("e" / "E") ["-" / "+"] 1*digit
+	first := input[0]
+	neg := false
+	if first == '-' {
+		neg = true
+		input = input[1:]
+	}
+	var ret float64 = 0
+	var integer int = 0
+	var decimal int = 0
+	var exp int = 0
+	var err error
+	n := len(input)
+	var IllegalInput = errors.New("illegal input")
+	if n == 0 {
+		// no more charater
+		return ret, "", IllegalInput
+	}
+	// take care of 0.0 0.12120
+	if input[0] == '0' && n == 1 {
+		// start with zero illegal like 0123
+		return ret, "", nil
+	}
+	if input[0] == '0' && n > 1 && !(input[1] == '.' || input[1] == 'e' || input[1] == 'E') {
+		// start with zero illegal like 0123
+		return ret, "", IllegalInput
+	}
+	if !isDigit(input[0]) {
+		// 非法开头字符
+		return ret, "", IllegalInput
+	}
+	input, integer, err = parseInteger(input)
+	if err != nil {
+		return ret, "", err
+	}
+	n = len(input)
+	if n <= 0 {
+		// end just integer
+		ret = float64(integer)
+		if neg {
+			return -ret, "", nil
+		}
+		return ret, "", nil
+	}
+	// frac or exp
+	ret = float64(integer)
+	if input[0] == '.' {
+		// should be frac
+		input, decimal, err = parseFrac(input)
+		if err != nil {
+			return ret, "", err
+		}
+		var frac int = 1
+		for j := n - 1; j > len(input); j-- {
+			frac *= 10
+		}
+		ret += float64(decimal) / float64(frac)
+		if len(input) == 0 {
+			if neg {
+				return -ret, "", nil
+			}
+			return ret, "", nil
+		}
+		if !(input[0] == 'e' || input[0] == 'E') {
+			// following is not exp
+			return ret, "", IllegalInput
+		}
+		input, exp, err = parseExp(input)
+		if err != nil || len(input) != 0 {
+			// illegal next char
+			return ret, "", IllegalInput
+		}
+		ret *= float64(math.Pow10(exp))
+		if neg {
+			return -ret, "", nil
+		}
+		return ret, "", nil
+	} else if input[0] == 'e' || input[0] == 'E' {
+		// should be exp
+		// get exp
+		input, exp, err = parseExp(input)
+		if err != nil {
+			return ret, "", err
+		}
+		if len(input) != 0 {
+			// follow illegal char
+			return ret, "", IllegalInput
+		}
+		ret *= float64(math.Pow10(exp))
+		if neg {
+			return -ret, "", nil
+		}
+		return ret, "", nil
+	} else {
+		// illegal next
+		return ret, "", IllegalInput
+	}
+}
+
+func parseExp(input string) (string, int, error) {
+	if input[0] == 'e' || input[0] == 'E' {
+		// should be exp
+		if len(input) == 1 {
+			// just e E illegal
+			return "", 0, errors.New("input is not a exp")
+		}
+		expNeg := false
+		if input[1] == '-' || input[1] == '+' {
+			expNeg = input[1] == '-'
+			input = input[2:]
+		} else {
+			input = input[1:]
+		}
+		// get exp
+		input, exp, err := parseInteger(input)
+		if err != nil {
+			return "", 0, err
+		}
+		if expNeg {
+			return input, -exp, err
+		}
+		return input, exp, err
+	}
+	return "", 0, errors.New("input is not a exp")
+}
+func parseFrac(input string) (string, int, error) {
+	if input[0] == '.' {
+		// should be frac
+		return parseInteger(input[1:])
+	}
+	return "", 0, errors.New("input is not a frac")
+}
+func parseInteger(input string) (string, int, error) {
+	i := 0
+	n := len(input)
+	for i < n && isDigit(input[i]) {
+		// get the integer
+		i++
+	}
+	integer, err := strconv.Atoi(input[:i])
+	if err != nil {
+		return "", 0, err
+	}
+	return input[i:], integer, nil
+}
+
+func isDigit(char byte) bool {
+	return char >= '0' && char <= '9'
+}
+
+func isDigit1to9(char byte) bool {
+	return char >= '1' && char <= '9'
+}
+
 // LeptParseValue use to parse value switch to spec func
 func LeptParseValue(c *LeptContext, v *LeptValue) int {
 	n := len(c.json)
@@ -136,7 +331,7 @@ func LeptParseValue(c *LeptContext, v *LeptValue) int {
 	case 'f':
 		return LeptParseFalse(c, v)
 	default:
-		return LeptParseInvalidValue
+		return LeptParseNumber(c, v)
 	}
 }
 
@@ -164,4 +359,12 @@ func LeptGetType(v *LeptValue) LeptType {
 		panic("LeptGetType v is nil")
 	}
 	return v.typ
+}
+
+// LeptGetNumber use to get the type of value
+func LeptGetNumber(v *LeptValue) float64 {
+	if v == nil || v.typ != LeptNUMBER {
+		panic("LeptGetNumber v is nil or typ is not LeptNUMBER")
+	}
+	return v.n
 }
