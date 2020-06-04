@@ -10,9 +10,14 @@ func expectEQInt(t *testing.T, expect int, actual int) {
 		t.Errorf("parse events, expect: %v, actual: %v", expect, actual)
 	}
 }
-func expectEQFloat32(t *testing.T, expect, actual float64) {
+func expectEQFloat64(t *testing.T, expect, actual float64) {
 	if expect != actual {
-		t.Errorf("parse events, expect: %v, actual: %v", expect, actual)
+		t.Errorf("parse float64, expect: %v, actual: %v", expect, actual)
+	}
+}
+func expectEQString(t *testing.T, expect, actual string) {
+	if expect != actual {
+		t.Errorf("parse string, expect: %v, actual: %v", expect, actual)
 	}
 }
 func expectEQLeptType(t *testing.T, expect, actual LeptType) {
@@ -21,17 +26,17 @@ func expectEQLeptType(t *testing.T, expect, actual LeptType) {
 	}
 }
 func TestLeptParseNull(t *testing.T) {
-	v := &LeptValue{LeptFALSE, 0.0}
+	v := NewLeptValue()
 	expectEQInt(t, LeptParseOK, LeptParse(v, "null"))
 	expectEQLeptType(t, LeptNULL, LeptGetType(v))
 }
 func TestLeptParseTrue(t *testing.T) {
-	v := &LeptValue{LeptFALSE, 0.0}
+	v := NewLeptValue()
 	expectEQInt(t, LeptParseOK, LeptParse(v, "true"))
 	expectEQLeptType(t, LeptTRUE, LeptGetType(v))
 }
 func TestLeptParseFalse(t *testing.T) {
-	v := &LeptValue{LeptFALSE, 0.0}
+	v := NewLeptValue()
 	expectEQInt(t, LeptParseOK, LeptParse(v, "false"))
 	expectEQLeptType(t, LeptFALSE, LeptGetType(v))
 }
@@ -60,10 +65,10 @@ func TestLeptParseNumber(t *testing.T) {
 		{"1e-10000", 0.0},
 	}
 	for _, c := range valid {
-		v := &LeptValue{LeptFALSE, 0.0}
+		v := NewLeptValue()
 		expectEQInt(t, LeptParseOK, LeptParse(v, c.input))
 		expectEQLeptType(t, LeptNUMBER, LeptGetType(v))
-		expectEQFloat32(t, c.expect, LeptGetNumber(v))
+		expectEQFloat64(t, c.expect, LeptGetNumber(v))
 	}
 	edges := []struct {
 		input  string
@@ -80,10 +85,10 @@ func TestLeptParseNumber(t *testing.T) {
 		{"-1.7976931348623157e+308", -1.7976931348623157e+308},
 	}
 	for _, c := range edges {
-		v := &LeptValue{LeptFALSE, 0.0}
+		v := NewLeptValue()
 		expectEQInt(t, LeptParseOK, LeptParse(v, c.input))
 		expectEQLeptType(t, LeptNUMBER, LeptGetType(v))
-		expectEQFloat32(t, c.expect, LeptGetNumber(v))
+		expectEQFloat64(t, c.expect, LeptGetNumber(v))
 	}
 	// TEST_NUMBER(1.0000000000000002, "1.0000000000000002"); /* the smallest number > 1 */
 	// TEST_NUMBER( 4.9406564584124654e-324, "4.9406564584124654e-324"); /* minimum denormal */
@@ -111,7 +116,7 @@ func TestLeptParseNumber(t *testing.T) {
 		{"0x123", 1.5},
 	}
 	for _, c := range invalid {
-		v := &LeptValue{LeptFALSE, 0.0}
+		v := NewLeptValue()
 		expectEQInt(t, LeptParseInvalidValue, LeptParse(v, c.input))
 	}
 	// TEST_ERROR(LEPT_PARSE_NUMBER_TOO_BIG, "1e309");
@@ -171,7 +176,7 @@ func TestParseFloat(t *testing.T) {
 }
 
 func TestParseExpectValue(t *testing.T) {
-	v := &LeptValue{LeptFALSE, 0.0}
+	v := NewLeptValue()
 
 	expectEQInt(t, LeptParseExpectValue, LeptParse(v, ""))
 	expectEQLeptType(t, LeptNULL, LeptGetType(v))
@@ -180,7 +185,7 @@ func TestParseExpectValue(t *testing.T) {
 	expectEQLeptType(t, LeptNULL, LeptGetType(v))
 }
 func TestParseInvalidValue(t *testing.T) {
-	v := &LeptValue{LeptFALSE, 0.0}
+	v := NewLeptValue()
 
 	expectEQInt(t, LeptParseInvalidValue, LeptParse(v, "nul"))
 	expectEQLeptType(t, LeptNULL, LeptGetType(v))
@@ -189,8 +194,98 @@ func TestParseInvalidValue(t *testing.T) {
 	expectEQLeptType(t, LeptNULL, LeptGetType(v))
 }
 func TestParseRootNotSingular(t *testing.T) {
-	v := &LeptValue{LeptFALSE, 0.0}
+	v := NewLeptValue()
 
 	expectEQInt(t, LeptParseRootNotSingular, LeptParse(v, "null x"))
 	expectEQLeptType(t, LeptNULL, LeptGetType(v))
+}
+func TestParseString(t *testing.T) {
+	valid := []struct {
+		input  string
+		expect string
+	}{
+		{"\"\"", ""},
+		{"\"Hello\"", "Hello"},
+		{"\"Hello\\nWorld\"", "Hello\nWorld"},
+		{"\"\\\" \\\\ \\/ \\b \\f \\n \\r \\t\"", "\" \\ / \b \f \n \r \t"},
+	}
+	for _, c := range valid {
+		v := NewLeptValue()
+		expectEQInt(t, LeptParseOK, LeptParse(v, c.input))
+		expectEQLeptType(t, LeptSTRING, LeptGetType(v))
+		expectEQInt(t, len(c.expect), LeptGetStringLength(v))
+		expectEQString(t, c.expect, LeptGetString(v))
+	}
+}
+func TestParseMissingQuotationMark(t *testing.T) {
+	valid := []struct {
+		input  string
+		expect string
+	}{
+		{"\"", ""},
+		{"\"abc", ""},
+	}
+	for _, c := range valid {
+		v := NewLeptValue()
+		expectEQInt(t, LeptParseMissQuotationMark, LeptParse(v, c.input))
+	}
+}
+func TestParseInvalidStringEscape(t *testing.T) {
+	valid := []struct {
+		input  string
+		expect string
+	}{
+		{"\"\\v\"", ""},
+		{"\"\\'\"", ""},
+		{"\"\\0\"", ""},
+		{"\"\\x12\"", ""},
+	}
+	for _, c := range valid {
+		v := NewLeptValue()
+		expectEQInt(t, LeptParseInvalidStringEscape, LeptParse(v, c.input))
+	}
+}
+func TestParseInvalidStringChar(t *testing.T) {
+	valid := []struct {
+		input  string
+		expect string
+	}{
+		{"\"\x01\"", ""},
+		{"\"\x1F\"", ""},
+	}
+	for _, c := range valid {
+		v := NewLeptValue()
+		expectEQInt(t, LeptParseInvalidStringChar, LeptParse(v, c.input))
+	}
+}
+
+func TestAccessNull(t *testing.T) {
+	v := NewLeptValue()
+	LeptSetString(v, "a")
+	LeptSetNull(v)
+	expectEQLeptType(t, LeptNULL, LeptGetType(v))
+}
+func TestAccessBoolean(t *testing.T) {
+	v := NewLeptValue()
+	LeptSetBoolean(v, 1)
+	expectEQLeptType(t, LeptTRUE, LeptGetType(v))
+	LeptSetBoolean(v, 0)
+	expectEQLeptType(t, LeptFALSE, LeptGetType(v))
+}
+func TestAccessNumber(t *testing.T) {
+	v := NewLeptValue()
+	LeptSetNumber(v, 123.123)
+	expectEQLeptType(t, LeptNUMBER, LeptGetType(v))
+	expectEQFloat64(t, 123.123, LeptGetNumber(v))
+}
+func TestAccessString(t *testing.T) {
+	v := NewLeptValue()
+	LeptSetString(v, "")
+	expectEQLeptType(t, LeptSTRING, LeptGetType(v))
+	expectEQInt(t, 0, LeptGetStringLength(v))
+	expectEQString(t, "", LeptGetString(v))
+	LeptSetString(v, "Hello")
+	expectEQLeptType(t, LeptSTRING, LeptGetType(v))
+	expectEQInt(t, 5, LeptGetStringLength(v))
+	expectEQString(t, "Hello", LeptGetString(v))
 }

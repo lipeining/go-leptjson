@@ -1,6 +1,7 @@
 package leptjson
 
 import (
+	"bytes"
 	"errors"
 	"math"
 	"strconv"
@@ -25,6 +26,12 @@ const (
 	LeptParseRootNotSingular
 	// LeptParseNumberTooBig number is to big
 	LeptParseNumberTooBig
+	// LeptParseMissQuotationMark
+	LeptParseMissQuotationMark
+	// LeptParseInvalidStringEscape
+	LeptParseInvalidStringEscape
+	// LeptParseInvalidStringChar
+	LeptParseInvalidStringChar
 )
 
 // LeptType enums of json type
@@ -51,11 +58,26 @@ const (
 type LeptValue struct {
 	typ LeptType
 	n   float64
+	s   string
+}
+
+// NewLeptValue return a init LeptValue
+func NewLeptValue() *LeptValue {
+	return &LeptValue{
+		typ: LeptFALSE,
+	}
 }
 
 // LeptContext hold the input string
 type LeptContext struct {
 	json string
+}
+
+// NewLeptContext return a init LeptContext
+func NewLeptContext(json string) *LeptContext {
+	return &LeptContext{
+		json: json,
+	}
 }
 
 func expect(c *LeptContext, ch byte) {
@@ -317,6 +339,72 @@ func isDigit1to9(char byte) bool {
 	return char >= '1' && char <= '9'
 }
 
+// LeptParseString use to parse string include \u
+// string = quotation-mark *char quotation-mark
+// char = unescaped /
+//    escape (
+//        %x22 /          ; "    quotation mark  U+0022
+//        %x5C /          ; \    reverse solidus U+005C
+//        %x2F /          ; /    solidus         U+002F
+//        %x62 /          ; b    backspace       U+0008
+//        %x66 /          ; f    form feed       U+000C
+//        %x6E /          ; n    line feed       U+000A
+//        %x72 /          ; r    carriage return U+000D
+//        %x74 /          ; t    tab             U+0009
+//        %x75 4HEXDIG )  ; uXXXX                U+XXXX
+// escape = %x5C          ; \
+// quotation-mark = %x22  ; "
+// unescaped = %x20-21 / %x23-5B / %x5D-10FFFF
+func LeptParseString(c *LeptContext, v *LeptValue) int {
+	expect(c, '"')
+	var stack bytes.Buffer
+	for i, n := 0, len(c.json); i < n; i++ {
+		ch := c.json[i]
+		switch ch {
+		case '"':
+			LeptSetString(v, stack.String())
+			stack.Truncate(0)
+			c.json = c.json[i+1:]
+			return LeptParseOK
+		case '\\':
+			// 遇到第一个转义符号，需要连续匹配两个 \
+			if i+1 >= n {
+				return LeptParseInvalidStringEscape
+			}
+			switch c.json[i+1] {
+			case '"':
+				stack.WriteString("\"")
+			case '\\':
+				stack.WriteString("\\")
+			case 'b':
+				stack.WriteString("\b")
+			case 'f':
+				stack.WriteString("\f")
+			case 'n':
+				stack.WriteString("\n")
+			case 'r':
+				stack.WriteString("\r")
+			case 't':
+				stack.WriteString("\t")
+			case '/':
+				stack.WriteString("/")
+			default:
+				return LeptParseInvalidStringEscape
+			}
+			i++
+		default:
+			// 	unescaped = %x20-21 / %x23-5B / %x5D-10FFFF
+			// 当中空缺的 %x22 是双引号，%x5C 是反斜线，都已经处理。所以不合法的字符是 %x00 至 %x1F。
+			if ch < 0x20 {
+				return LeptParseInvalidStringChar
+			}
+			stack.WriteByte(ch)
+		}
+	}
+	// reach end of string becase the string has no \"
+	return LeptParseMissQuotationMark
+}
+
 // LeptParseValue use to parse value switch to spec func
 func LeptParseValue(c *LeptContext, v *LeptValue) int {
 	n := len(c.json)
@@ -330,6 +418,8 @@ func LeptParseValue(c *LeptContext, v *LeptValue) int {
 		return LeptParseTrue(c, v)
 	case 'f':
 		return LeptParseFalse(c, v)
+	case '"':
+		return LeptParseString(c, v)
 	default:
 		return LeptParseNumber(c, v)
 	}
@@ -340,7 +430,7 @@ func LeptParse(v *LeptValue, json string) int {
 	if v == nil {
 		panic("LeptParse v is nil")
 	}
-	c := &LeptContext{json}
+	c := NewLeptContext(json)
 	v.typ = LeptNULL
 	LeptParseWhitespace(c)
 	if ret := LeptParseValue(c, v); ret != LeptParseOK {
@@ -361,10 +451,75 @@ func LeptGetType(v *LeptValue) LeptType {
 	return v.typ
 }
 
+// LeptSetNull use to set the type of null
+func LeptSetNull(v *LeptValue) {
+	if v == nil {
+		panic("LeptGetNumber v is nil or typ is not LeptNUMBER")
+	}
+	v.typ = LeptNULL
+}
+
 // LeptGetNumber use to get the type of value
 func LeptGetNumber(v *LeptValue) float64 {
 	if v == nil || v.typ != LeptNUMBER {
 		panic("LeptGetNumber v is nil or typ is not LeptNUMBER")
 	}
 	return v.n
+}
+
+// LeptSetNumber use to set the type of value
+func LeptSetNumber(v *LeptValue, n float64) {
+	if v == nil {
+		panic("LeptSetNumber v is nil ")
+	}
+	v.n = n
+	v.typ = LeptNUMBER
+}
+
+// LeptGetBoolean use to get the type of value
+func LeptGetBoolean(v *LeptValue) int {
+	if v == nil || !(v.typ == LeptFALSE || v.typ == LeptTRUE) {
+		panic("LeptGetBoolean v is nil or typ is not boolean")
+	}
+	if v.typ == LeptFALSE {
+		return 0
+	}
+	return 1
+}
+
+// LeptSetBoolean use to set the type of value
+func LeptSetBoolean(v *LeptValue, n int) {
+	if v == nil {
+		panic("LeptSetBoolean v is nil ")
+	}
+	if n == 0 {
+		v.typ = LeptFALSE
+	} else {
+		v.typ = LeptTRUE
+	}
+}
+
+// LeptGetStringLength use to get the type of value
+func LeptGetStringLength(v *LeptValue) int {
+	if v == nil || v.typ != LeptSTRING {
+		panic("LeptGetStringLength v is nil or typ is not string")
+	}
+	return len(v.s)
+}
+
+// LeptGetString use to get the type of value
+func LeptGetString(v *LeptValue) string {
+	if v == nil || v.typ != LeptSTRING {
+		panic("LeptGetString v is nil or typ is not string")
+	}
+	return v.s
+}
+
+// LeptSetString use to get the type of value
+func LeptSetString(v *LeptValue, s string) {
+	if v == nil {
+		panic("LeptSetString v is nil")
+	}
+	v.s = s
+	v.typ = LeptSTRING
 }
