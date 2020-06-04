@@ -1,4 +1,4 @@
-package leptjson
+package goleptjson
 
 import (
 	"strconv"
@@ -28,17 +28,17 @@ func expectEQLeptType(t *testing.T, expect, actual LeptType) {
 func TestLeptParseNull(t *testing.T) {
 	v := NewLeptValue()
 	expectEQInt(t, LeptParseOK, LeptParse(v, "null"))
-	expectEQLeptType(t, LeptNULL, LeptGetType(v))
+	expectEQLeptType(t, LeptNull, LeptGetType(v))
 }
 func TestLeptParseTrue(t *testing.T) {
 	v := NewLeptValue()
 	expectEQInt(t, LeptParseOK, LeptParse(v, "true"))
-	expectEQLeptType(t, LeptTRUE, LeptGetType(v))
+	expectEQLeptType(t, LeptTrue, LeptGetType(v))
 }
 func TestLeptParseFalse(t *testing.T) {
 	v := NewLeptValue()
 	expectEQInt(t, LeptParseOK, LeptParse(v, "false"))
-	expectEQLeptType(t, LeptFALSE, LeptGetType(v))
+	expectEQLeptType(t, LeptFalse, LeptGetType(v))
 }
 func TestLeptParseNumber(t *testing.T) {
 	valid := []struct {
@@ -67,7 +67,7 @@ func TestLeptParseNumber(t *testing.T) {
 	for _, c := range valid {
 		v := NewLeptValue()
 		expectEQInt(t, LeptParseOK, LeptParse(v, c.input))
-		expectEQLeptType(t, LeptNUMBER, LeptGetType(v))
+		expectEQLeptType(t, LeptNumber, LeptGetType(v))
 		expectEQFloat64(t, c.expect, LeptGetNumber(v))
 	}
 	edges := []struct {
@@ -87,7 +87,7 @@ func TestLeptParseNumber(t *testing.T) {
 	for _, c := range edges {
 		v := NewLeptValue()
 		expectEQInt(t, LeptParseOK, LeptParse(v, c.input))
-		expectEQLeptType(t, LeptNUMBER, LeptGetType(v))
+		expectEQLeptType(t, LeptNumber, LeptGetType(v))
 		expectEQFloat64(t, c.expect, LeptGetNumber(v))
 	}
 	// TEST_NUMBER(1.0000000000000002, "1.0000000000000002"); /* the smallest number > 1 */
@@ -146,7 +146,7 @@ func TestParseFloat(t *testing.T) {
 		{"1.234E-10", 1.234E-10},
 		{"1e-10000", 0.0},
 	}
-	// 无法解析全部的数据，因为格式不对
+	// 使用 strconv 无法解析全部的数据，因为格式不对
 	for _, c := range valid {
 		if ret, err := strconv.ParseFloat(c.input, 64); err != nil || float64(ret) != c.expect {
 			t.Errorf("ParseFloat err: %v", err)
@@ -179,25 +179,25 @@ func TestParseExpectValue(t *testing.T) {
 	v := NewLeptValue()
 
 	expectEQInt(t, LeptParseExpectValue, LeptParse(v, ""))
-	expectEQLeptType(t, LeptNULL, LeptGetType(v))
+	expectEQLeptType(t, LeptNull, LeptGetType(v))
 
 	expectEQInt(t, LeptParseExpectValue, LeptParse(v, " "))
-	expectEQLeptType(t, LeptNULL, LeptGetType(v))
+	expectEQLeptType(t, LeptNull, LeptGetType(v))
 }
 func TestParseInvalidValue(t *testing.T) {
 	v := NewLeptValue()
 
 	expectEQInt(t, LeptParseInvalidValue, LeptParse(v, "nul"))
-	expectEQLeptType(t, LeptNULL, LeptGetType(v))
+	expectEQLeptType(t, LeptNull, LeptGetType(v))
 
 	expectEQInt(t, LeptParseInvalidValue, LeptParse(v, "?"))
-	expectEQLeptType(t, LeptNULL, LeptGetType(v))
+	expectEQLeptType(t, LeptNull, LeptGetType(v))
 }
 func TestParseRootNotSingular(t *testing.T) {
 	v := NewLeptValue()
 
 	expectEQInt(t, LeptParseRootNotSingular, LeptParse(v, "null x"))
-	expectEQLeptType(t, LeptNULL, LeptGetType(v))
+	expectEQLeptType(t, LeptNull, LeptGetType(v))
 }
 func TestParseString(t *testing.T) {
 	valid := []struct {
@@ -212,7 +212,7 @@ func TestParseString(t *testing.T) {
 	for _, c := range valid {
 		v := NewLeptValue()
 		expectEQInt(t, LeptParseOK, LeptParse(v, c.input))
-		expectEQLeptType(t, LeptSTRING, LeptGetType(v))
+		expectEQLeptType(t, LeptString, LeptGetType(v))
 		expectEQInt(t, len(c.expect), LeptGetStringLength(v))
 		expectEQString(t, c.expect, LeptGetString(v))
 	}
@@ -263,29 +263,29 @@ func TestAccessNull(t *testing.T) {
 	v := NewLeptValue()
 	LeptSetString(v, "a")
 	LeptSetNull(v)
-	expectEQLeptType(t, LeptNULL, LeptGetType(v))
+	expectEQLeptType(t, LeptNull, LeptGetType(v))
 }
 func TestAccessBoolean(t *testing.T) {
 	v := NewLeptValue()
 	LeptSetBoolean(v, 1)
-	expectEQLeptType(t, LeptTRUE, LeptGetType(v))
+	expectEQLeptType(t, LeptTrue, LeptGetType(v))
 	LeptSetBoolean(v, 0)
-	expectEQLeptType(t, LeptFALSE, LeptGetType(v))
+	expectEQLeptType(t, LeptFalse, LeptGetType(v))
 }
 func TestAccessNumber(t *testing.T) {
 	v := NewLeptValue()
 	LeptSetNumber(v, 123.123)
-	expectEQLeptType(t, LeptNUMBER, LeptGetType(v))
+	expectEQLeptType(t, LeptNumber, LeptGetType(v))
 	expectEQFloat64(t, 123.123, LeptGetNumber(v))
 }
 func TestAccessString(t *testing.T) {
 	v := NewLeptValue()
 	LeptSetString(v, "")
-	expectEQLeptType(t, LeptSTRING, LeptGetType(v))
+	expectEQLeptType(t, LeptString, LeptGetType(v))
 	expectEQInt(t, 0, LeptGetStringLength(v))
 	expectEQString(t, "", LeptGetString(v))
 	LeptSetString(v, "Hello")
-	expectEQLeptType(t, LeptSTRING, LeptGetType(v))
+	expectEQLeptType(t, LeptString, LeptGetType(v))
 	expectEQInt(t, 5, LeptGetStringLength(v))
 	expectEQString(t, "Hello", LeptGetString(v))
 }

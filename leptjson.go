@@ -1,4 +1,4 @@
-package leptjson
+package goleptjson
 
 import (
 	"bytes"
@@ -38,20 +38,20 @@ const (
 type LeptType int
 
 const (
-	// LeptNULL parse to nil
-	LeptNULL LeptType = iota
-	// LeptFALSE parse to false
-	LeptFALSE
-	// LeptTRUE parse to true
-	LeptTRUE
-	// LeptNUMBER parse to number like int float
-	LeptNUMBER
-	// LeptSTRING parse to string
-	LeptSTRING
-	// LeptARRAY parse to array
-	LeptARRAY
-	// LeptOBJECT parse to map
-	LeptOBJECT
+	// LeptNull parse to nil
+	LeptNull LeptType = iota
+	// LeptFalse parse to false
+	LeptFalse
+	// LeptTrue parse to true
+	LeptTrue
+	// LeptNumber parse to number like int float
+	LeptNumber
+	// LeptString parse to string
+	LeptString
+	// LeptArray parse to array
+	LeptArray
+	// LeptObject parse to map
+	LeptObject
 )
 
 // LeptValue hold the value
@@ -64,7 +64,7 @@ type LeptValue struct {
 // NewLeptValue return a init LeptValue
 func NewLeptValue() *LeptValue {
 	return &LeptValue{
-		typ: LeptFALSE,
+		typ: LeptFalse,
 	}
 }
 
@@ -113,7 +113,7 @@ func LeptParseNull(c *LeptContext, v *LeptValue) int {
 		return LeptParseInvalidValue
 	}
 	c.json = c.json[want-1:]
-	v.typ = LeptNULL
+	v.typ = LeptNull
 	return LeptParseOK
 }
 
@@ -129,7 +129,7 @@ func LeptParseTrue(c *LeptContext, v *LeptValue) int {
 		return LeptParseInvalidValue
 	}
 	c.json = c.json[want-1:]
-	v.typ = LeptTRUE
+	v.typ = LeptTrue
 	return LeptParseOK
 }
 
@@ -145,7 +145,7 @@ func LeptParseFalse(c *LeptContext, v *LeptValue) int {
 		return LeptParseInvalidValue
 	}
 	c.json = c.json[want-1:]
-	v.typ = LeptFALSE
+	v.typ = LeptFalse
 	return LeptParseOK
 }
 
@@ -176,7 +176,7 @@ func LeptParseNumber(c *LeptContext, v *LeptValue) int {
 		return LeptParseInvalidValue
 	}
 	c.json = end
-	v.typ = LeptNUMBER
+	v.typ = LeptNumber
 	return LeptParseOK
 }
 
@@ -431,7 +431,7 @@ func LeptParse(v *LeptValue, json string) int {
 		panic("LeptParse v is nil")
 	}
 	c := NewLeptContext(json)
-	v.typ = LeptNULL
+	v.typ = LeptNull
 	LeptParseWhitespace(c)
 	if ret := LeptParseValue(c, v); ret != LeptParseOK {
 		return ret
@@ -454,15 +454,15 @@ func LeptGetType(v *LeptValue) LeptType {
 // LeptSetNull use to set the type of null
 func LeptSetNull(v *LeptValue) {
 	if v == nil {
-		panic("LeptGetNumber v is nil or typ is not LeptNUMBER")
+		panic("LeptGetNumber v is nil or typ is not LeptNumber")
 	}
-	v.typ = LeptNULL
+	v.typ = LeptNull
 }
 
 // LeptGetNumber use to get the type of value
 func LeptGetNumber(v *LeptValue) float64 {
-	if v == nil || v.typ != LeptNUMBER {
-		panic("LeptGetNumber v is nil or typ is not LeptNUMBER")
+	if v == nil || v.typ != LeptNumber {
+		panic("LeptGetNumber v is nil or typ is not LeptNumber")
 	}
 	return v.n
 }
@@ -473,15 +473,15 @@ func LeptSetNumber(v *LeptValue, n float64) {
 		panic("LeptSetNumber v is nil ")
 	}
 	v.n = n
-	v.typ = LeptNUMBER
+	v.typ = LeptNumber
 }
 
 // LeptGetBoolean use to get the type of value
 func LeptGetBoolean(v *LeptValue) int {
-	if v == nil || !(v.typ == LeptFALSE || v.typ == LeptTRUE) {
+	if v == nil || !(v.typ == LeptFalse || v.typ == LeptTrue) {
 		panic("LeptGetBoolean v is nil or typ is not boolean")
 	}
-	if v.typ == LeptFALSE {
+	if v.typ == LeptFalse {
 		return 0
 	}
 	return 1
@@ -493,15 +493,15 @@ func LeptSetBoolean(v *LeptValue, n int) {
 		panic("LeptSetBoolean v is nil ")
 	}
 	if n == 0 {
-		v.typ = LeptFALSE
+		v.typ = LeptFalse
 	} else {
-		v.typ = LeptTRUE
+		v.typ = LeptTrue
 	}
 }
 
 // LeptGetStringLength use to get the type of value
 func LeptGetStringLength(v *LeptValue) int {
-	if v == nil || v.typ != LeptSTRING {
+	if v == nil || v.typ != LeptString {
 		panic("LeptGetStringLength v is nil or typ is not string")
 	}
 	return len(v.s)
@@ -509,7 +509,7 @@ func LeptGetStringLength(v *LeptValue) int {
 
 // LeptGetString use to get the type of value
 func LeptGetString(v *LeptValue) string {
-	if v == nil || v.typ != LeptSTRING {
+	if v == nil || v.typ != LeptString {
 		panic("LeptGetString v is nil or typ is not string")
 	}
 	return v.s
@@ -521,5 +521,5 @@ func LeptSetString(v *LeptValue, s string) {
 		panic("LeptSetString v is nil")
 	}
 	v.s = s
-	v.typ = LeptSTRING
+	v.typ = LeptString
 }
