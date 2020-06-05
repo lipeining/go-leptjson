@@ -5,7 +5,12 @@ import (
 	"testing"
 )
 
-func expectEQInt(t *testing.T, expect int, actual int) {
+func expectEQInt(t *testing.T, expect, actual int) {
+	if expect != actual {
+		t.Errorf("parse int, expect: %v, actual: %v", expect, actual)
+	}
+}
+func expectEQLeptEvent(t *testing.T, expect, actual LeptEvent) {
 	if expect != actual {
 		t.Errorf("parse int, expect: %v, actual: %v", expect, actual)
 	}
@@ -27,17 +32,17 @@ func expectEQLeptType(t *testing.T, expect, actual LeptType) {
 }
 func TestLeptParseNull(t *testing.T) {
 	v := NewLeptValue()
-	expectEQInt(t, LeptParseOK, LeptParse(v, "null"))
+	expectEQLeptEvent(t, LeptParseOK, LeptParse(v, "null"))
 	expectEQLeptType(t, LeptNull, LeptGetType(v))
 }
 func TestLeptParseTrue(t *testing.T) {
 	v := NewLeptValue()
-	expectEQInt(t, LeptParseOK, LeptParse(v, "true"))
+	expectEQLeptEvent(t, LeptParseOK, LeptParse(v, "true"))
 	expectEQLeptType(t, LeptTrue, LeptGetType(v))
 }
 func TestLeptParseFalse(t *testing.T) {
 	v := NewLeptValue()
-	expectEQInt(t, LeptParseOK, LeptParse(v, "false"))
+	expectEQLeptEvent(t, LeptParseOK, LeptParse(v, "false"))
 	expectEQLeptType(t, LeptFalse, LeptGetType(v))
 }
 func TestLeptParseNumber(t *testing.T) {
@@ -66,7 +71,7 @@ func TestLeptParseNumber(t *testing.T) {
 	}
 	for _, c := range valid {
 		v := NewLeptValue()
-		expectEQInt(t, LeptParseOK, LeptParse(v, c.input))
+		expectEQLeptEvent(t, LeptParseOK, LeptParse(v, c.input))
 		expectEQLeptType(t, LeptNumber, LeptGetType(v))
 		expectEQFloat64(t, c.expect, LeptGetNumber(v))
 	}
@@ -86,7 +91,7 @@ func TestLeptParseNumber(t *testing.T) {
 	}
 	for _, c := range edges {
 		v := NewLeptValue()
-		expectEQInt(t, LeptParseOK, LeptParse(v, c.input))
+		expectEQLeptEvent(t, LeptParseOK, LeptParse(v, c.input))
 		expectEQLeptType(t, LeptNumber, LeptGetType(v))
 		expectEQFloat64(t, c.expect, LeptGetNumber(v))
 	}
@@ -117,7 +122,7 @@ func TestLeptParseNumber(t *testing.T) {
 	}
 	for _, c := range invalid {
 		v := NewLeptValue()
-		expectEQInt(t, LeptParseInvalidValue, LeptParse(v, c.input))
+		expectEQLeptEvent(t, LeptParseInvalidValue, LeptParse(v, c.input))
 	}
 	// TEST_ERROR(LEPT_PARSE_NUMBER_TOO_BIG, "1e309");
 	// TEST_ERROR(LEPT_PARSE_NUMBER_TOO_BIG, "-1e309");
@@ -178,25 +183,25 @@ func TestParseFloat(t *testing.T) {
 func TestParseExpectValue(t *testing.T) {
 	v := NewLeptValue()
 
-	expectEQInt(t, LeptParseExpectValue, LeptParse(v, ""))
+	expectEQLeptEvent(t, LeptParseExpectValue, LeptParse(v, ""))
 	expectEQLeptType(t, LeptNull, LeptGetType(v))
 
-	expectEQInt(t, LeptParseExpectValue, LeptParse(v, " "))
+	expectEQLeptEvent(t, LeptParseExpectValue, LeptParse(v, " "))
 	expectEQLeptType(t, LeptNull, LeptGetType(v))
 }
 func TestParseInvalidValue(t *testing.T) {
 	v := NewLeptValue()
 
-	expectEQInt(t, LeptParseInvalidValue, LeptParse(v, "nul"))
+	expectEQLeptEvent(t, LeptParseInvalidValue, LeptParse(v, "nul"))
 	expectEQLeptType(t, LeptNull, LeptGetType(v))
 
-	expectEQInt(t, LeptParseInvalidValue, LeptParse(v, "?"))
+	expectEQLeptEvent(t, LeptParseInvalidValue, LeptParse(v, "?"))
 	expectEQLeptType(t, LeptNull, LeptGetType(v))
 }
 func TestParseRootNotSingular(t *testing.T) {
 	v := NewLeptValue()
 
-	expectEQInt(t, LeptParseRootNotSingular, LeptParse(v, "null x"))
+	expectEQLeptEvent(t, LeptParseRootNotSingular, LeptParse(v, "null x"))
 	expectEQLeptType(t, LeptNull, LeptGetType(v))
 }
 func TestParseString(t *testing.T) {
@@ -218,7 +223,7 @@ func TestParseString(t *testing.T) {
 	// 将 uint64 转为 []byte 的方式奇怪。
 	for _, c := range valid {
 		v := NewLeptValue()
-		expectEQInt(t, LeptParseOK, LeptParse(v, c.input))
+		expectEQLeptEvent(t, LeptParseOK, LeptParse(v, c.input))
 		expectEQLeptType(t, LeptString, LeptGetType(v))
 		expectEQInt(t, len(c.expect), LeptGetStringLength(v))
 		expectEQString(t, c.expect, LeptGetString(v))
@@ -234,7 +239,7 @@ func TestParseMissingQuotationMark(t *testing.T) {
 	}
 	for _, c := range valid {
 		v := NewLeptValue()
-		expectEQInt(t, LeptParseMissQuotationMark, LeptParse(v, c.input))
+		expectEQLeptEvent(t, LeptParseMissQuotationMark, LeptParse(v, c.input))
 	}
 }
 func TestParseInvalidStringEscape(t *testing.T) {
@@ -249,7 +254,7 @@ func TestParseInvalidStringEscape(t *testing.T) {
 	}
 	for _, c := range valid {
 		v := NewLeptValue()
-		expectEQInt(t, LeptParseInvalidStringEscape, LeptParse(v, c.input))
+		expectEQLeptEvent(t, LeptParseInvalidStringEscape, LeptParse(v, c.input))
 	}
 }
 func TestParseInvalidStringChar(t *testing.T) {
@@ -262,7 +267,7 @@ func TestParseInvalidStringChar(t *testing.T) {
 	}
 	for _, c := range valid {
 		v := NewLeptValue()
-		expectEQInt(t, LeptParseInvalidStringChar, LeptParse(v, c.input))
+		expectEQLeptEvent(t, LeptParseInvalidStringChar, LeptParse(v, c.input))
 	}
 }
 func TestParseInvalidUnicodeHex(t *testing.T) {
@@ -285,7 +290,7 @@ func TestParseInvalidUnicodeHex(t *testing.T) {
 	}
 	for _, c := range valid {
 		v := NewLeptValue()
-		expectEQInt(t, LeptParseInvalidUnicodeHex, LeptParse(v, c.input))
+		expectEQLeptEvent(t, LeptParseInvalidUnicodeHex, LeptParse(v, c.input))
 	}
 }
 func TestParseInvalidSurrogate(t *testing.T) {
@@ -301,7 +306,7 @@ func TestParseInvalidSurrogate(t *testing.T) {
 	}
 	for _, c := range valid {
 		v := NewLeptValue()
-		expectEQInt(t, LeptParseInvalidUnicodeSurrogate, LeptParse(v, c.input))
+		expectEQLeptEvent(t, LeptParseInvalidUnicodeSurrogate, LeptParse(v, c.input))
 	}
 }
 func TestParseArray(t *testing.T) {
@@ -313,7 +318,7 @@ func TestParseArray(t *testing.T) {
 	}
 	for _, c := range valid {
 		v := NewLeptValue()
-		expectEQInt(t, LeptParseOK, LeptParse(v, c.input))
+		expectEQLeptEvent(t, LeptParseOK, LeptParse(v, c.input))
 		expectEQLeptType(t, LeptArray, LeptGetType(v))
 		expectEQInt(t, 0, LeptGetArraySize(v))
 	}
@@ -322,7 +327,7 @@ func TestParseArray(t *testing.T) {
 	{
 		v := NewLeptValue()
 		input := "[ null , false , true , 123.0 , \"abc\" ]"
-		expectEQInt(t, LeptParseOK, LeptParse(v, input))
+		expectEQLeptEvent(t, LeptParseOK, LeptParse(v, input))
 		expectEQLeptType(t, LeptArray, LeptGetType(v))
 		expectEQInt(t, 5, LeptGetArraySize(v))
 		// null
@@ -342,7 +347,7 @@ func TestParseArray(t *testing.T) {
 	{
 		v := NewLeptValue()
 		input := "[ [ ] , [ 0 ] , [ 0 , 1 ] , [ 0 , 1 , 2 ] ]"
-		expectEQInt(t, LeptParseOK, LeptParse(v, input))
+		expectEQLeptEvent(t, LeptParseOK, LeptParse(v, input))
 		expectEQLeptType(t, LeptArray, LeptGetType(v))
 		expectEQInt(t, 4, LeptGetArraySize(v))
 		for i := 0; i < 4; i++ {
@@ -369,7 +374,7 @@ func TestParseMissCoomaOrSquareBracket(t *testing.T) {
 	}
 	for _, c := range valid {
 		v := NewLeptValue()
-		expectEQInt(t, LeptParseMissCommaOrSouareBracket, LeptParse(v, c.input))
+		expectEQLeptEvent(t, LeptParseMissCommaOrSouareBracket, LeptParse(v, c.input))
 	}
 }
 
@@ -377,7 +382,7 @@ func TestParseObject(t *testing.T) {
 	{
 		v := NewLeptValue()
 		input := " { } "
-		expectEQInt(t, LeptParseOK, LeptParse(v, input))
+		expectEQLeptEvent(t, LeptParseOK, LeptParse(v, input))
 		expectEQLeptType(t, LeptObject, LeptGetType(v))
 		expectEQInt(t, 0, LeptGetObjectSize(v))
 	}
@@ -392,7 +397,7 @@ func TestParseObject(t *testing.T) {
 			"\"a\" : [ 1, 2, 3 ]," +
 			"\"o\" : { \"1\" : 1, \"2\" : 2, \"3\" : 3 }" +
 			" } "
-		expectEQInt(t, LeptParseOK, LeptParse(v, input))
+		expectEQLeptEvent(t, LeptParseOK, LeptParse(v, input))
 		expectEQLeptType(t, LeptObject, LeptGetType(v))
 		expectEQInt(t, 7, LeptGetObjectSize(v))
 
@@ -456,7 +461,7 @@ func TestParseMissKey(t *testing.T) {
 	}
 	for _, c := range valid {
 		v := NewLeptValue()
-		expectEQInt(t, LeptParseMissKey, LeptParse(v, c.input))
+		expectEQLeptEvent(t, LeptParseMissKey, LeptParse(v, c.input))
 	}
 }
 
@@ -470,7 +475,7 @@ func TestParseMissColon(t *testing.T) {
 	}
 	for _, c := range valid {
 		v := NewLeptValue()
-		expectEQInt(t, LeptParseMissColon, LeptParse(v, c.input))
+		expectEQLeptEvent(t, LeptParseMissColon, LeptParse(v, c.input))
 	}
 }
 func TestParseMissCommaOrCurlyBracket(t *testing.T) {
@@ -485,7 +490,7 @@ func TestParseMissCommaOrCurlyBracket(t *testing.T) {
 	}
 	for _, c := range valid {
 		v := NewLeptValue()
-		expectEQInt(t, LeptParseMissCommaOrCurlyBracket, LeptParse(v, c.input))
+		expectEQLeptEvent(t, LeptParseMissCommaOrCurlyBracket, LeptParse(v, c.input))
 	}
 }
 
