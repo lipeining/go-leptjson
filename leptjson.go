@@ -2,6 +2,7 @@ package goleptjson
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"math"
 	"strconv"
@@ -32,6 +33,10 @@ const (
 	LeptParseInvalidStringEscape
 	// LeptParseInvalidStringChar
 	LeptParseInvalidStringChar
+	// LeptParseInvalidUnicodeHex
+	LeptParseInvalidUnicodeHex
+	// LeptParseInvalidUnicodeSurrogate
+	LeptParseInvalidUnicodeSurrogate
 )
 
 // LeptType enums of json type
@@ -388,9 +393,57 @@ func LeptParseString(c *LeptContext, v *LeptValue) int {
 				stack.WriteString("\t")
 			case '/':
 				stack.WriteString("/")
+			case 'u':
+				u, err := leptParseHex4(c.json[i+2:])
+				if err != nil {
+					return LeptParseInvalidUnicodeHex
+				}
+				if u < 0 || u > 0x10FFFF {
+					return LeptParseInvalidUnicodeHex
+				}
+				if u >= 0xD800 && u <= 0xDBFF { /* surrogate pair */
+					if i+6 >= n || c.json[i+6] != '\\' {
+						return LeptParseInvalidUnicodeSurrogate
+					}
+					if i+7 >= n || c.json[i+7] != 'u' {
+						return LeptParseInvalidUnicodeSurrogate
+					}
+					u2, err := leptParseHex4(c.json[i+8:])
+					if err != nil {
+						return LeptParseInvalidUnicodeHex
+					}
+					if u2 < 0xDC00 || u2 > 0xDFFF {
+						return LeptParseInvalidUnicodeSurrogate
+					}
+					u = (((u - 0xD800) << 10) | (u2 - 0xDC00)) + 0x10000
+					i += 6
+				}
+				// 检查代理对
+				// stack.WriteString(leptEncodeUTF8(u))
+				if u <= 0x7F {
+					stack.Write(leptEncodeUTF8(u & 0xFF))
+				} else if u <= 0x7FF {
+					stack.Write(leptEncodeUTF8(0xC0 | ((u >> 6) & 0xFF)))
+					stack.Write(leptEncodeUTF8(0x80 | (u & 0x3F)))
+				} else if u <= 0xFFFF {
+					stack.Write(leptEncodeUTF8(0xE0 | ((u >> 12) & 0xFF)))
+					stack.Write(leptEncodeUTF8(0x80 | ((u >> 6) & 0x3F)))
+					stack.Write(leptEncodeUTF8(0x80 | (u & 0x3F)))
+				} else if u <= 0x10FFFF {
+					stack.Write(leptEncodeUTF8(0xF0 | ((u >> 18) & 0xFF)))
+					stack.Write(leptEncodeUTF8(0x80 | ((u >> 12) & 0x3F)))
+					stack.Write(leptEncodeUTF8(0x80 | ((u >> 6) & 0x3F)))
+					stack.Write(leptEncodeUTF8(0x80 | (u & 0x3F)))
+				} else {
+					panic("u is illegal")
+				}
+				// 将 uxxxx 跳过
+				// \\ 最后是有 i++ 这里只需要 4
+				i += 4
 			default:
 				return LeptParseInvalidStringEscape
 			}
+			// 这里的 i++ 针对普通的转码字符，至于 unicode 需要另外处理 uxxxx 个字符
 			i++
 		default:
 			// 	unescaped = %x20-21 / %x23-5B / %x5D-10FFFF
@@ -404,6 +457,87 @@ func LeptParseString(c *LeptContext, v *LeptValue) int {
 	// reach end of string becase the string has no \"
 	return LeptParseMissQuotationMark
 }
+func leptEncodeUTF8(u uint64) []byte {
+	bufSize := 8
+	buf := make([]byte, bufSize)
+	write := binary.PutUvarint(buf, u)
+	// 这里奇怪 到底应该取 buf[:write] 还是 buf[:write-1]
+	// todo fix \u0024 unicode encoding
+	return buf[:write-1]
+}
+func leptParseHex4(input string) (uint64, error) {
+	n := len(input)
+	if n < 4 {
+		return 0, errors.New("illegal hex length of 4")
+	}
+	u, err := strconv.ParseUint(input[:4], 16, 64)
+	if err != nil {
+		return 0, errors.New("illegal hex string")
+	}
+	return u, nil
+}
+
+// func hex() {
+// 	bufSize := 8
+// 	buf := make([]byte, bufSize)
+// 	write := 0
+// 	if u <= 0x007F {
+// 		write = binary.PutUvarint(buf, u&0xFF)
+// 		stack.Write(buf[:write])
+// 	} else if u >= 0x0080 && u <= 0x07FF {
+// 		write = binary.PutUvarint(buf, 0xC0|((u>>6)&0xFF))
+// 		stack.Write(buf[:write])
+// 		write = binary.PutUvarint(buf, 0x80|(u&0x3F))
+// 		stack.Write(buf[:write])
+// 	} else if u >= 0x0800 && u <= 0xFFFF {
+// 		write = binary.PutUvarint(buf, 0xE0|((u>>12)&0xFF))
+// 		stack.Write(buf[:write])
+// 		write = binary.PutUvarint(buf, 0x80|((u>>6)&0x3F))
+// 		stack.Write(buf[:write])
+// 		write = binary.PutUvarint(buf, 0x80|(u&0x3F))
+// 		stack.Write(buf[:write])
+// 	} else if u >= 0x10000 && u <= 0x10FFFF {
+// 		write = binary.PutUvarint(buf, 0xF0|((u>>18)&0xFF))
+// 		stack.Write(buf[:write])
+// 		write = binary.PutUvarint(buf, 0x80|((u>>12)&0x3F))
+// 		stack.Write(buf[:write])
+// 		write = binary.PutUvarint(buf, 0x80|((u>>6)&0x3F))
+// 		stack.Write(buf[:write])
+// 		write = binary.PutUvarint(buf, 0x80|(u&0x3F))
+// 		stack.Write(buf[:write])
+// 	} else {
+// 		panic("u is illegal")
+// 	}
+// }
+// func leptEncodeUTF8(u uint64) string {
+// 	// 针对 四个区间         码点位数   字节1      字节2      字节3     字节4
+// 	// 0x0000 - 0x007F      7         0xxxxxxx
+// 	// 0x0080 - 0x07FF      11        1100xxxx   10xxxxxx
+// 	// 0x0800 - 0xFFFF      16        1110xxxx   10xxxxxx  10xxxxxx
+// 	// 0x10000 - 0x10FFFF   21        11110xxx   10xxxxxx  10xxxxxx  10xxxxxx
+// 	if u <= 0x007F {
+// 		return formatUintToHex(u)
+// 	}
+// 	if u >= 0x0080 && u <= 0x07FF {
+// 		return formatUintToHex(0xC0|((u>>6)&0xFF)) +
+// 			formatUintToHex(0x80|(u&0x3F))
+// 	}
+// 	if u >= 0x0800 && u <= 0xFFFF {
+// 		return formatUintToHex(0xE0|((u>>12)&0xFF)) +
+// 			formatUintToHex(0x80|((u>>6)&0x3F)) +
+// 			formatUintToHex(0x80|(u&0x3F))
+// 	}
+// 	if u >= 0x10000 && u <= 0x10FFFF {
+// 		return formatUintToHex(0xF0|((u>>18)&0xFF)) +
+// 			formatUintToHex(0x80|((u>>12)&0x3F)) +
+// 			formatUintToHex(0x80|((u>>6)&0x3F)) +
+// 			formatUintToHex(0x80|(u&0x3F))
+// 	}
+// 	return "illegal-utf8-string"
+// }
+// func formatUintToHex(num uint64) string {
+// 	return strconv.FormatUint(num, 16)
+// }
 
 // LeptParseValue use to parse value switch to spec func
 func LeptParseValue(c *LeptContext, v *LeptValue) int {

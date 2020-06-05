@@ -7,7 +7,7 @@ import (
 
 func expectEQInt(t *testing.T, expect int, actual int) {
 	if expect != actual {
-		t.Errorf("parse events, expect: %v, actual: %v", expect, actual)
+		t.Errorf("parse int, expect: %v, actual: %v", expect, actual)
 	}
 }
 func expectEQFloat64(t *testing.T, expect, actual float64) {
@@ -208,7 +208,14 @@ func TestParseString(t *testing.T) {
 		{"\"Hello\"", "Hello"},
 		{"\"Hello\\nWorld\"", "Hello\nWorld"},
 		{"\"\\\" \\\\ \\/ \\b \\f \\n \\r \\t\"", "\" \\ / \b \f \n \r \t"},
+		// {"\"Hello\\u0000World\"", "Hello\0World"},
+		{"\"\\u0024\"", "\x24"},
+		{"\"\\u00A2\"", "\xC2\xA2"},
+		{"\"\\u20AC\"", "\xE2\x82\xAC"},
+		{"\"\\uD834\\uDD1E\"", "\xF0\x9D\x84\x9E"},
+		{"\"\\ud834\\udd1e\"", "\xF0\x9D\x84\x9E"},
 	}
+	// 将 uint64 转为 []byte 的方式奇怪。
 	for _, c := range valid {
 		v := NewLeptValue()
 		expectEQInt(t, LeptParseOK, LeptParse(v, c.input))
@@ -256,6 +263,45 @@ func TestParseInvalidStringChar(t *testing.T) {
 	for _, c := range valid {
 		v := NewLeptValue()
 		expectEQInt(t, LeptParseInvalidStringChar, LeptParse(v, c.input))
+	}
+}
+func TestParseInvalidUnicodeHex(t *testing.T) {
+	valid := []struct {
+		input  string
+		expect string
+	}{
+		{"\"\\u\"", ""},
+		{"\"\\u0\"", ""},
+		{"\"\\u01\"", ""},
+		{"\"\\u012\"", ""},
+		{"\"\\u/000\"", ""},
+		{"\"\\uG000\"", ""},
+		{"\"\\u0/00\"", ""},
+		{"\"\\u0G00\"", ""},
+		{"\"\\u00/0\"", ""},
+		{"\"\\u00G0\"", ""},
+		{"\"\\u000/\"", ""},
+		{"\"\\u000G\"", ""},
+	}
+	for _, c := range valid {
+		v := NewLeptValue()
+		expectEQInt(t, LeptParseInvalidUnicodeHex, LeptParse(v, c.input))
+	}
+}
+func TestParseInvalidSurrogate(t *testing.T) {
+	valid := []struct {
+		input  string
+		expect string
+	}{
+		{"\"\\uD800\"", ""},
+		{"\"\\uDBFF\"", ""},
+		{"\"\\uD800\\\\\"", ""},
+		{"\"\\uD800\\uDBFF\"", ""},
+		{"\"\\uD800\\uE000\"", ""},
+	}
+	for _, c := range valid {
+		v := NewLeptValue()
+		expectEQInt(t, LeptParseInvalidUnicodeSurrogate, LeptParse(v, c.input))
 	}
 }
 
