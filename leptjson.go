@@ -25,8 +25,12 @@ const (
 	LeptParseInvalidValue
 	// LeptParseRootNotSingular root not singular
 	LeptParseRootNotSingular
+
+	// for number
 	// LeptParseNumberTooBig number is to big
 	LeptParseNumberTooBig
+
+	// for string
 	// LeptParseMissQuotationMark
 	LeptParseMissQuotationMark
 	// LeptParseInvalidStringEscape
@@ -37,8 +41,18 @@ const (
 	LeptParseInvalidUnicodeHex
 	// LeptParseInvalidUnicodeSurrogate
 	LeptParseInvalidUnicodeSurrogate
+
+	// for array
 	// LeptParseMissCommaOrSouareBracket
 	LeptParseMissCommaOrSouareBracket
+
+	// for object
+	// LeptParseMissKey
+	LeptParseMissKey
+	// LeptParseMissColon
+	LeptParseMissColon
+	// LeptParseMissCommaOrCurlyBracket
+	LeptParseMissCommaOrCurlyBracket
 )
 
 // LeptType enums of json type
@@ -61,12 +75,19 @@ const (
 	LeptObject
 )
 
+// LeptMember use to hold a pair of key/value
+type LeptMember struct {
+	key   string
+	value *LeptValue
+}
+
 // LeptValue hold the value
 type LeptValue struct {
 	typ LeptType
 	n   float64
 	s   string
-	a   []*LeptValue // for array
+	a   []*LeptValue  // for array
+	o   []*LeptMember // for object
 }
 
 // NewLeptValue return a init LeptValue
@@ -216,10 +237,17 @@ func strtod(input string) (float64, string, error) {
 		// start with zero illegal like 0123
 		return ret, "", nil
 	}
-	if input[0] == '0' && n > 1 && !(input[1] == '.' || input[1] == 'e' || input[1] == 'E') && isDigit(input[1]) {
-		// start with zero illegal like 0123
-		return ret, input, IllegalInput
+	if input[0] == '0' && n > 1 {
+		if input[1] == '.' {
+			// pass have to check fix frac
+		} else if input[1] == 'e' || input[1] == 'E' {
+			// pass have to check fix exp
+		} else if input[1] == 'x' || isDigit(input[1]) {
+			// fix of 0x0 ox123 0123 0abc
+			return ret, input, IllegalInput
+		}
 	}
+	// fix 1abc 1, 1x
 	if !isDigit(input[0]) {
 		// 非法开头字符
 		return ret, input, IllegalInput
@@ -257,8 +285,8 @@ func strtod(input string) (float64, string, error) {
 			return ret, input, nil
 		}
 		if !(input[0] == 'e' || input[0] == 'E') {
-			// following is not exp
-			return ret, input, IllegalInput
+			// following is not exp  do not parse any more leave it to next parser
+			return ret, input, nil
 		}
 		input, exp, err = parseExp(input)
 		if err != nil || len(input) != 0 {
@@ -272,14 +300,13 @@ func strtod(input string) (float64, string, error) {
 		return ret, input, nil
 	} else if input[0] == 'e' || input[0] == 'E' {
 		// should be exp
-		// get exp
 		input, exp, err = parseExp(input)
 		if err != nil {
 			return ret, input, err
 		}
 		if len(input) != 0 {
-			// follow illegal char
-			return ret, input, IllegalInput
+			// do not parse any more leave it to next parser
+			return ret, input, nil
 		}
 		ret *= float64(math.Pow10(exp))
 		if neg {
@@ -319,6 +346,9 @@ func parseExp(input string) (string, int, error) {
 	return "", 0, errors.New("input is not a exp")
 }
 func parseFrac(input string) (string, int, error) {
+	if len(input) == 1 {
+		return "", 0, errors.New("input is not a frac")
+	}
 	if input[0] == '.' {
 		// should be frac
 		return parseInteger(input[1:])
@@ -348,6 +378,16 @@ func isDigit1to9(char byte) bool {
 }
 
 // LeptParseString use to parse string include \u
+func LeptParseString(c *LeptContext, v *LeptValue) int {
+	s, ok := LeptParseStringRaw(c)
+	if ok != LeptParseOK {
+		return ok
+	}
+	LeptSetString(v, s)
+	return ok
+}
+
+// LeptParseStringRaw use to parse string
 // string = quotation-mark *char quotation-mark
 // char = unescaped /
 //    escape (
@@ -363,21 +403,20 @@ func isDigit1to9(char byte) bool {
 // escape = %x5C          ; \
 // quotation-mark = %x22  ; "
 // unescaped = %x20-21 / %x23-5B / %x5D-10FFFF
-func LeptParseString(c *LeptContext, v *LeptValue) int {
+func LeptParseStringRaw(c *LeptContext) (string, int) {
 	expect(c, '"')
 	var stack bytes.Buffer
+	defer stack.Truncate(0)
 	for i, n := 0, len(c.json); i < n; i++ {
 		ch := c.json[i]
 		switch ch {
 		case '"':
-			LeptSetString(v, stack.String())
-			stack.Truncate(0)
 			c.json = c.json[i+1:]
-			return LeptParseOK
+			return stack.String(), LeptParseOK
 		case '\\':
 			// 遇到第一个转义符号，需要连续匹配两个 \
 			if i+1 >= n {
-				return LeptParseInvalidStringEscape
+				return "", LeptParseInvalidStringEscape
 			}
 			switch c.json[i+1] {
 			case '"':
@@ -399,24 +438,24 @@ func LeptParseString(c *LeptContext, v *LeptValue) int {
 			case 'u':
 				u, err := leptParseHex4(c.json[i+2:])
 				if err != nil {
-					return LeptParseInvalidUnicodeHex
+					return "", LeptParseInvalidUnicodeHex
 				}
 				if u < 0 || u > 0x10FFFF {
-					return LeptParseInvalidUnicodeHex
+					return "", LeptParseInvalidUnicodeHex
 				}
 				if u >= 0xD800 && u <= 0xDBFF { /* surrogate pair */
 					if i+6 >= n || c.json[i+6] != '\\' {
-						return LeptParseInvalidUnicodeSurrogate
+						return "", LeptParseInvalidUnicodeSurrogate
 					}
 					if i+7 >= n || c.json[i+7] != 'u' {
-						return LeptParseInvalidUnicodeSurrogate
+						return "", LeptParseInvalidUnicodeSurrogate
 					}
 					u2, err := leptParseHex4(c.json[i+8:])
 					if err != nil {
-						return LeptParseInvalidUnicodeHex
+						return "", LeptParseInvalidUnicodeHex
 					}
 					if u2 < 0xDC00 || u2 > 0xDFFF {
-						return LeptParseInvalidUnicodeSurrogate
+						return "", LeptParseInvalidUnicodeSurrogate
 					}
 					u = (((u - 0xD800) << 10) | (u2 - 0xDC00)) + 0x10000
 					i += 6
@@ -444,7 +483,7 @@ func LeptParseString(c *LeptContext, v *LeptValue) int {
 				// \\ 最后是有 i++ 这里只需要 4
 				i += 4
 			default:
-				return LeptParseInvalidStringEscape
+				return "", LeptParseInvalidStringEscape
 			}
 			// 这里的 i++ 针对普通的转码字符，至于 unicode 需要另外处理 uxxxx 个字符
 			i++
@@ -452,14 +491,15 @@ func LeptParseString(c *LeptContext, v *LeptValue) int {
 			// 	unescaped = %x20-21 / %x23-5B / %x5D-10FFFF
 			// 当中空缺的 %x22 是双引号，%x5C 是反斜线，都已经处理。所以不合法的字符是 %x00 至 %x1F。
 			if ch < 0x20 {
-				return LeptParseInvalidStringChar
+				return "", LeptParseInvalidStringChar
 			}
 			stack.WriteByte(ch)
 		}
 	}
 	// reach end of string becase the string has no \"
-	return LeptParseMissQuotationMark
+	return "", LeptParseMissQuotationMark
 }
+
 func leptEncodeUTF8(u uint64) []byte {
 	bufSize := 8
 	buf := make([]byte, bufSize)
@@ -563,6 +603,8 @@ func LeptParseValue(c *LeptContext, v *LeptValue) int {
 		return LeptParseString(c, v)
 	case '[':
 		return LeptParseArray(c, v)
+	case '{':
+		return LeptParseObject(c, v)
 	default:
 		return LeptParseNumber(c, v)
 	}
@@ -570,6 +612,7 @@ func LeptParseValue(c *LeptContext, v *LeptValue) int {
 
 // LeptParseArray use to parse array
 func LeptParseArray(c *LeptContext, v *LeptValue) int {
+	// array = %x5B ws [ value *( ws %x2C ws value ) ] ws %x5D
 	expect(c, '[')
 	LeptParseWhitespace(c)
 	n := len(c.json)
@@ -604,6 +647,63 @@ func LeptParseArray(c *LeptContext, v *LeptValue) int {
 			return LeptParseOK
 		} else {
 			return LeptParseMissCommaOrSouareBracket
+		}
+	}
+}
+
+// LeptParseObject use to parse object
+func LeptParseObject(c *LeptContext, v *LeptValue) int {
+	// member = string ws %x3A ws value
+	// object = %x7B ws [ member *( ws %x2C ws member ) ] ws %x7D
+	expect(c, '{')
+	LeptParseWhitespace(c)
+	n := len(c.json)
+	if n == 0 {
+		return LeptParseMissCommaOrCurlyBracket
+	}
+	if c.json[0] == '}' {
+		v.typ = LeptObject
+		v.a = make([]*LeptValue, 0)
+		v.o = make([]*LeptMember, 0)
+		c.json = c.json[1:]
+		return LeptParseOK
+	}
+	for {
+		if len(c.json) == 0 || c.json[0] != '"' {
+			return LeptParseMissKey
+		}
+		ki, ok := LeptParseStringRaw(c)
+		if ok != LeptParseOK {
+			return ok
+		}
+		if len(ki) == 0 {
+			return LeptParseMissKey
+		}
+		LeptParseWhitespace(c)
+		if c.json[0] != ':' {
+			return LeptParseMissColon
+		}
+		c.json = c.json[1:]
+		LeptParseWhitespace(c)
+		vi := NewLeptValue()
+		if ok := LeptParseValue(c, vi); ok != LeptParseOK {
+			return ok
+		}
+		v.o = append(v.o, &LeptMember{key: ki, value: vi})
+		// 教程中的解析 空格 时有道理的，需要在值之后解析 ws。具体参考对应的 regex 定义
+		LeptParseWhitespace(c)
+		if len(c.json) == 0 {
+			return LeptParseMissCommaOrCurlyBracket
+		}
+		if c.json[0] == ',' {
+			c.json = c.json[1:]
+			LeptParseWhitespace(c)
+		} else if c.json[0] == '}' {
+			c.json = c.json[1:]
+			v.typ = LeptObject
+			return LeptParseOK
+		} else {
+			return LeptParseMissCommaOrCurlyBracket
 		}
 	}
 }
@@ -724,4 +824,48 @@ func LeptGetArraySize(v *LeptValue) int {
 		panic("LeptGetArrayElement v is nil or typ is not array")
 	}
 	return len(v.a)
+}
+
+// LeptGetObjectSize use to get the size of object
+func LeptGetObjectSize(v *LeptValue) int {
+	if v == nil || v.typ != LeptObject {
+		panic("LeptGetObjectSize v is nil or typ is not object")
+	}
+	return len(v.o)
+}
+
+// LeptGetObjectKey use to get the key of object
+func LeptGetObjectKey(v *LeptValue, index int) string {
+	if v == nil || v.typ != LeptObject {
+		panic("LeptGetObjectKey v is nil or typ is not object")
+	}
+	if len(v.o) <= index {
+		panic("LeptGetObjectKey v length <= input index")
+	}
+	member := v.o[index]
+	return member.key
+}
+
+// LeptGetObjectKeyLength use to get the key length of object
+func LeptGetObjectKeyLength(v *LeptValue, index int) int {
+	if v == nil || v.typ != LeptObject {
+		panic("LeptGetObjectKeyLength v is nil or typ is not object")
+	}
+	if len(v.o) <= index {
+		panic("LeptGetObjectKeyLength v length <= input index")
+	}
+	member := v.o[index]
+	return len(member.key)
+}
+
+// LeptGetObjectValue use to get the value of object
+func LeptGetObjectValue(v *LeptValue, index int) *LeptValue {
+	if v == nil || v.typ != LeptObject {
+		panic("LeptGetObjectValue v is nil or typ is not object")
+	}
+	if len(v.o) <= index {
+		panic("LeptGetObjectValue v length <= input index")
+	}
+	member := v.o[index]
+	return member.value
 }

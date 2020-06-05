@@ -321,7 +321,7 @@ func TestParseArray(t *testing.T) {
 	// [ [ ] , [ 0 ] , [ 0 , 1 ] , [ 0 , 1 , 2 ] ]
 	{
 		v := NewLeptValue()
-		input := "[ null , false , true , 123 , \"abc\" ]"
+		input := "[ null , false , true , 123.0 , \"abc\" ]"
 		expectEQInt(t, LeptParseOK, LeptParse(v, input))
 		expectEQLeptType(t, LeptArray, LeptGetType(v))
 		expectEQInt(t, 5, LeptGetArraySize(v))
@@ -373,6 +373,122 @@ func TestParseMissCoomaOrSquareBracket(t *testing.T) {
 	}
 }
 
+func TestParseObject(t *testing.T) {
+	{
+		v := NewLeptValue()
+		input := " { } "
+		expectEQInt(t, LeptParseOK, LeptParse(v, input))
+		expectEQLeptType(t, LeptObject, LeptGetType(v))
+		expectEQInt(t, 0, LeptGetObjectSize(v))
+	}
+	{
+		v := NewLeptValue()
+		input := " { " +
+			"\"n\" : null , " +
+			"\"f\" : false , " +
+			"\"t\" : true , " +
+			"\"i\" : 123 , " +
+			"\"s\" : \"abc\", " +
+			"\"a\" : [ 1, 2, 3 ]," +
+			"\"o\" : { \"1\" : 1, \"2\" : 2, \"3\" : 3 }" +
+			" } "
+		expectEQInt(t, LeptParseOK, LeptParse(v, input))
+		expectEQLeptType(t, LeptObject, LeptGetType(v))
+		expectEQInt(t, 7, LeptGetObjectSize(v))
+
+		expectEQString(t, "n", LeptGetObjectKey(v, 0))
+		expectEQInt(t, len("n"), LeptGetObjectKeyLength(v, 0))
+		expectEQLeptType(t, LeptNull, LeptGetType(LeptGetObjectValue(v, 0)))
+
+		expectEQString(t, "f", LeptGetObjectKey(v, 1))
+		expectEQInt(t, len("f"), LeptGetObjectKeyLength(v, 1))
+		expectEQLeptType(t, LeptFalse, LeptGetType(LeptGetObjectValue(v, 1)))
+
+		expectEQString(t, "t", LeptGetObjectKey(v, 2))
+		expectEQInt(t, len("t"), LeptGetObjectKeyLength(v, 2))
+		expectEQLeptType(t, LeptTrue, LeptGetType(LeptGetObjectValue(v, 2)))
+
+		expectEQString(t, "i", LeptGetObjectKey(v, 3))
+		expectEQInt(t, len("i"), LeptGetObjectKeyLength(v, 3))
+		expectEQLeptType(t, LeptNumber, LeptGetType(LeptGetObjectValue(v, 3)))
+		expectEQFloat64(t, 123.0, LeptGetNumber(LeptGetObjectValue(v, 3)))
+
+		expectEQString(t, "s", LeptGetObjectKey(v, 4))
+		expectEQInt(t, len("s"), LeptGetObjectKeyLength(v, 4))
+		expectEQLeptType(t, LeptString, LeptGetType(LeptGetObjectValue(v, 4)))
+		expectEQString(t, "abc", LeptGetString(LeptGetObjectValue(v, 4)))
+
+		expectEQString(t, "a", LeptGetObjectKey(v, 5))
+		expectEQInt(t, len("a"), LeptGetObjectKeyLength(v, 5))
+		expectEQLeptType(t, LeptArray, LeptGetType(LeptGetObjectValue(v, 5)))
+		expectEQInt(t, 3, LeptGetArraySize(LeptGetObjectValue(v, 5)))
+		for i := 0; i < 3; i++ {
+			e := LeptGetArrayElement(LeptGetObjectValue(v, 5), i)
+			expectEQLeptType(t, LeptNumber, LeptGetType(e))
+			expectEQFloat64(t, float64(i)+1.0, LeptGetNumber(e))
+		}
+
+		expectEQString(t, "o", LeptGetObjectKey(v, 6))
+		expectEQInt(t, len("o"), LeptGetObjectKeyLength(v, 6))
+		expectEQLeptType(t, LeptObject, LeptGetType(LeptGetObjectValue(v, 6)))
+		expectEQInt(t, 3, LeptGetObjectSize(LeptGetObjectValue(v, 6)))
+		for i := 0; i < 3; i++ {
+			e := LeptGetObjectValue(LeptGetObjectValue(v, 6), i)
+			expectEQLeptType(t, LeptNumber, LeptGetType(e))
+			expectEQFloat64(t, float64(i)+1.0, LeptGetNumber(e))
+		}
+	}
+}
+
+func TestParseMissKey(t *testing.T) {
+	valid := []struct {
+		input  string
+		expect string
+	}{
+		{"{:1,", "[ ]"},
+		{"{1:1,", "[ ]"},
+		{"{true:1,", "[ ]"},
+		{"{false:1,", "[ ]"},
+		{"{null:1,", "[ ]"},
+		{"{[]:1,", "[ ]"},
+		{"{{}:1,", "[ ]"},
+		{"{\"a\":1,", "[ ]"},
+	}
+	for _, c := range valid {
+		v := NewLeptValue()
+		expectEQInt(t, LeptParseMissKey, LeptParse(v, c.input))
+	}
+}
+
+func TestParseMissColon(t *testing.T) {
+	valid := []struct {
+		input  string
+		expect string
+	}{
+		{"{\"a\"}", "[ ]"},
+		{"{\"a\",\"b\"}", "[ ]"},
+	}
+	for _, c := range valid {
+		v := NewLeptValue()
+		expectEQInt(t, LeptParseMissColon, LeptParse(v, c.input))
+	}
+}
+func TestParseMissCommaOrCurlyBracket(t *testing.T) {
+	valid := []struct {
+		input  string
+		expect string
+	}{
+		{"{\"a\":1", "[ ]"},
+		{"{\"a\":1]", "[ ]"},
+		{"{\"a\":1 \"b\"", "[ ]"},
+		{"{\"a\":{}", "[ ]"},
+	}
+	for _, c := range valid {
+		v := NewLeptValue()
+		expectEQInt(t, LeptParseMissCommaOrCurlyBracket, LeptParse(v, c.input))
+	}
+}
+
 func TestAccessNull(t *testing.T) {
 	v := NewLeptValue()
 	LeptSetString(v, "a")
@@ -402,11 +518,4 @@ func TestAccessString(t *testing.T) {
 	expectEQLeptType(t, LeptString, LeptGetType(v))
 	expectEQInt(t, 5, LeptGetStringLength(v))
 	expectEQString(t, "Hello", LeptGetString(v))
-}
-func TestAccessArray(t *testing.T) {
-	// v := NewLeptValue()
-	// LeptSetString(v, "[ ]")
-	// expectEQLeptType(t, LeptArray, LeptGetType(v))
-	// expectEQInt(t, 0, LeptGetArraySize(v))
-	// expectEQString(t, "", LeptGetString(v))
 }
