@@ -877,3 +877,107 @@ func LeptGetObjectValue(v *LeptValue, index int) *LeptValue {
 	member := v.o[index]
 	return member.value
 }
+
+// LeptStringify 得到紧凑的数据 string
+func LeptStringify(v *LeptValue) string {
+	return leptStringifyValue(v)
+}
+
+func leptStringifyValue(v *LeptValue) string {
+	switch v.typ {
+	case LeptNull:
+		return "null"
+	case LeptFalse:
+		return "false"
+	case LeptTrue:
+		return "true"
+	case LeptNumber:
+		return strconv.FormatFloat(v.n, 'g', -1, 64)
+	case LeptString:
+		return leptStringifyString(v.s)
+	case LeptArray:
+		return leptStringifyArray(v)
+	case LeptObject:
+		return leptStringifyObject(v)
+	default:
+		panic("leptStringifyValue invalid type")
+	}
+}
+
+// leptStringifyString 考虑转义符号 unicode 字符集
+func leptStringifyString(s string) string {
+	var buf bytes.Buffer
+	buf.WriteByte('"')
+	hexDigits := []byte{'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'}
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '"':
+			buf.WriteByte('\\')
+			buf.WriteByte('"')
+		case '\\':
+			buf.WriteByte('\\')
+			buf.WriteByte('\\')
+		case '\b':
+			buf.WriteByte('\\')
+			buf.WriteByte('b')
+		case '\f':
+			buf.WriteByte('\\')
+			buf.WriteByte('f')
+		case '\n':
+			buf.WriteByte('\\')
+			buf.WriteByte('n')
+		case '\r':
+			buf.WriteByte('\\')
+			buf.WriteByte('r')
+		case '\t':
+			buf.WriteByte('\\')
+			buf.WriteByte('t')
+		default:
+			if s[i] < 0x20 {
+				buf.WriteByte('\\')
+				buf.WriteByte('u')
+				buf.WriteByte('0')
+				buf.WriteByte('0')
+				buf.WriteByte(hexDigits[s[i]>>4])
+				buf.WriteByte(hexDigits[s[i]&15])
+			} else {
+				buf.WriteByte(s[i])
+			}
+		}
+	}
+	buf.WriteByte('"')
+	return buf.String()
+}
+
+// leptStringifyArray 考虑转义符号 unicode 字符集
+func leptStringifyArray(v *LeptValue) string {
+	var buf bytes.Buffer
+	buf.WriteByte('[')
+	n := len(v.a)
+	for i := 0; i < n; i++ {
+		buf.WriteString(leptStringifyValue(v.a[i]))
+		if i != n-1 {
+			buf.WriteByte(',')
+		}
+	}
+	buf.WriteByte(']')
+	return buf.String()
+}
+
+// leptStringifyObject 考虑转义符号 unicode 字符集
+func leptStringifyObject(v *LeptValue) string {
+	var buf bytes.Buffer
+	buf.WriteByte('{')
+	n := len(v.o)
+	for i := 0; i < n; i++ {
+		key := v.o[i].key
+		value := v.o[i].value
+		buf.WriteString(leptStringifyString(key) + ":")
+		buf.WriteString(leptStringifyValue(value))
+		if i != n-1 {
+			buf.WriteByte(',')
+		}
+	}
+	buf.WriteByte('}')
+	return buf.String()
+}

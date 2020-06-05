@@ -524,3 +524,93 @@ func TestAccessString(t *testing.T) {
 	expectEQInt(t, 5, LeptGetStringLength(v))
 	expectEQString(t, "Hello", LeptGetString(v))
 }
+
+func TestLeptStringify(t *testing.T) {
+	bases := []struct {
+		input string
+	}{
+		{"null"},
+		{"true"},
+		{"false"},
+	}
+	for _, c := range bases {
+		v := NewLeptValue()
+		expectEQLeptEvent(t, LeptParseOK, LeptParse(v, c.input))
+		actual := LeptStringify(v)
+		expectEQString(t, c.input, actual)
+	}
+
+	numbers := []struct {
+		input string
+	}{
+		{"0"},
+		{"-0"},
+		{"1"},
+		{"-1"},
+		{"1.5"},
+		{"-1.5"},
+		{"3.25"},
+		{"1e+20"},
+		{"1.234e+20"},
+		{"1.234e-20"},
+
+		{"1.0000000000000002"},
+		// {"4.9406564584124654e-324"},
+		// {"-4.9406564584124654e-324"},
+		{"2.2250738585072009e-308"},
+		{"-2.2250738585072009e-308"},
+		{"2.2250738585072014e-308"},
+		{"-2.2250738585072014e-308"},
+		{"1.7976931348623157e+308"},
+		{"-1.7976931348623157e+308"},
+	}
+	for _, c := range numbers {
+		v := NewLeptValue()
+		expectEQLeptEvent(t, LeptParseOK, LeptParse(v, c.input))
+		actual := LeptStringify(v)
+		expectEQString(t, c.input, actual)
+		// 不完全正确的解析
+	}
+
+	strings := []struct {
+		input string
+	}{
+		{"\"\""},
+		{"\"Hello\""},
+		{"\"Hello\\nWorld\""},
+		{"\"\\\" \\\\ / \\b \\f \\n \\r \\t\""},
+		{"\"Hello\\u0000World\""},
+	}
+	for _, c := range strings {
+		v := NewLeptValue()
+		expectEQLeptEvent(t, LeptParseOK, LeptParse(v, c.input))
+		actual := LeptStringify(v)
+		expectEQString(t, c.input, actual)
+	}
+
+	// arrays := []struct {
+	// 	input string
+	// }{
+	// 	{"[]"},
+	// 	{"[null,false,true,123,\"abc\",[1,2,3]]"},
+	// }
+	// for _, c := range arrays {
+	// 	v := NewLeptValue()
+	// 	expectEQLeptEvent(t, LeptParseOK, LeptParse(v, c.input))
+	// 	actual := LeptStringify(v)
+	// 	expectEQString(t, c.input, actual)
+	// }
+
+	// objects := []struct {
+	// 	input string
+	// }{
+	// 	{"{}"},
+	// 	{"{\"n\":null,\"f\":false,\"t\":true,\"i\":123,\"s\":\"abc\",\"a\":[1,2,3],\"o\":{\"1\":1,\"2\":2,\"3\":3}}"},
+	// }
+	// for _, c := range objects {
+	// 	v := NewLeptValue()
+	// 	expectEQLeptEvent(t, LeptParseOK, LeptParse(v, c.input))
+	// 	actual := LeptStringify(v)
+	// 	expectEQString(t, c.input, actual)
+	// }
+}
