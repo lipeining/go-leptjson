@@ -4,7 +4,13 @@ just a json parser learning resp!
 
 main idea and lesson comes from (miloyip/json-tutorial)[https://github.com/miloyip/json-tutorial]
 
+### Parse Error
+leptjson 使用 int 作为解析错误的返回值，这里是否需要修改
+1.自定义 error 类型，使用 go 的 err != nil 方式
+2.使用 int 的一个类型，结构保持一致， ErrorType == 0 || 1 || 2 || 3
 
+
+### string
 ```md
 string = quotation-mark *char quotation-mark
 char = unescaped /
@@ -22,7 +28,7 @@ escape = %x5C          ; \
 quotation-mark = %x22  ; "
 unescaped = %x20-21 / %x23-5B / %x5D-10FFFF
 ```
-unicode
+### unicode
 ```md
 我们举一个例子解析多字节的情况，欧元符号 € → U+20AC：
 
@@ -52,3 +58,8 @@ if (u >= 0x0800 && u <= 0xFFFF) {
 也就是关于 go 这些格式数据的转化问题不清晰明了
 
 
+### array
+```md
+array = %x5B ws [ value *( ws %x2C ws value ) ] ws %x5D
+当中，%x5B 是左中括号 [，%x2C 是逗号 ,，%x5D 是右中括号 ] ，ws 是空白字符。一个数组可以包含零至多个值，以逗号分隔，例如 []、[1,2,true]、[[1,2],[3,4],"abc"] 都是合法的数组。但注意 JSON 不接受末端额外的逗号，例如 [1,2,] 是不合法的（许多编程语言如 C/C++、Javascript、Java、C# 都容许数组初始值包含末端逗号）。
+````

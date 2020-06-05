@@ -37,6 +37,8 @@ const (
 	LeptParseInvalidUnicodeHex
 	// LeptParseInvalidUnicodeSurrogate
 	LeptParseInvalidUnicodeSurrogate
+	// LeptParseMissCommaOrSouareBracket
+	LeptParseMissCommaOrSouareBracket
 )
 
 // LeptType enums of json type
@@ -64,6 +66,7 @@ type LeptValue struct {
 	typ LeptType
 	n   float64
 	s   string
+	e   []*LeptValue // for array
 }
 
 // NewLeptValue return a init LeptValue
@@ -203,7 +206,7 @@ func strtod(input string) (float64, string, error) {
 	var exp int = 0
 	var err error
 	n := len(input)
-	var IllegalInput = errors.New("illegal input")
+	var IllegalInput = errors.New("illegal input number string")
 	if n == 0 {
 		// no more charater
 		return ret, "", IllegalInput
@@ -213,26 +216,26 @@ func strtod(input string) (float64, string, error) {
 		// start with zero illegal like 0123
 		return ret, "", nil
 	}
-	if input[0] == '0' && n > 1 && !(input[1] == '.' || input[1] == 'e' || input[1] == 'E') {
+	if input[0] == '0' && n > 1 && !(input[1] == '.' || input[1] == 'e' || input[1] == 'E') && isDigit(input[1]) {
 		// start with zero illegal like 0123
-		return ret, "", IllegalInput
+		return ret, input, IllegalInput
 	}
 	if !isDigit(input[0]) {
 		// 非法开头字符
-		return ret, "", IllegalInput
+		return ret, input, IllegalInput
 	}
 	input, integer, err = parseInteger(input)
 	if err != nil {
-		return ret, "", err
+		return ret, input, err
 	}
 	n = len(input)
 	if n <= 0 {
 		// end just integer
 		ret = float64(integer)
 		if neg {
-			return -ret, "", nil
+			return -ret, input, nil
 		}
-		return ret, "", nil
+		return ret, input, nil
 	}
 	// frac or exp
 	ret = float64(integer)
@@ -240,7 +243,7 @@ func strtod(input string) (float64, string, error) {
 		// should be frac
 		input, decimal, err = parseFrac(input)
 		if err != nil {
-			return ret, "", err
+			return ret, input, err
 		}
 		var frac int = 1
 		for j := n - 1; j > len(input); j-- {
@@ -249,43 +252,43 @@ func strtod(input string) (float64, string, error) {
 		ret += float64(decimal) / float64(frac)
 		if len(input) == 0 {
 			if neg {
-				return -ret, "", nil
+				return -ret, input, nil
 			}
-			return ret, "", nil
+			return ret, input, nil
 		}
 		if !(input[0] == 'e' || input[0] == 'E') {
 			// following is not exp
-			return ret, "", IllegalInput
+			return ret, input, IllegalInput
 		}
 		input, exp, err = parseExp(input)
 		if err != nil || len(input) != 0 {
 			// illegal next char
-			return ret, "", IllegalInput
+			return ret, input, IllegalInput
 		}
 		ret *= float64(math.Pow10(exp))
 		if neg {
-			return -ret, "", nil
+			return -ret, input, nil
 		}
-		return ret, "", nil
+		return ret, input, nil
 	} else if input[0] == 'e' || input[0] == 'E' {
 		// should be exp
 		// get exp
 		input, exp, err = parseExp(input)
 		if err != nil {
-			return ret, "", err
+			return ret, input, err
 		}
 		if len(input) != 0 {
 			// follow illegal char
-			return ret, "", IllegalInput
+			return ret, input, IllegalInput
 		}
 		ret *= float64(math.Pow10(exp))
 		if neg {
-			return -ret, "", nil
+			return -ret, input, nil
 		}
-		return ret, "", nil
+		return ret, input, nil
 	} else {
-		// illegal next
-		return ret, "", IllegalInput
+		// illegal next like 123abc 123 , 123, 123] 123} 123space 等情况
+		return ret, input, nil
 	}
 }
 
@@ -558,8 +561,50 @@ func LeptParseValue(c *LeptContext, v *LeptValue) int {
 		return LeptParseFalse(c, v)
 	case '"':
 		return LeptParseString(c, v)
+	case '[':
+		return LeptParseArray(c, v)
 	default:
 		return LeptParseNumber(c, v)
+	}
+}
+
+// LeptParseArray use to parse array
+func LeptParseArray(c *LeptContext, v *LeptValue) int {
+	expect(c, '[')
+	LeptParseWhitespace(c)
+	n := len(c.json)
+	if n == 0 {
+		return LeptParseMissCommaOrSouareBracket
+	}
+	if c.json[0] == ']' {
+		v.typ = LeptArray
+		v.e = make([]*LeptValue, 0)
+		c.json = c.json[1:]
+		return LeptParseOK
+	}
+	for {
+		LeptParseWhitespace(c) // my
+		vi := NewLeptValue()
+		if ok := LeptParseValue(c, vi); ok != LeptParseOK {
+			return ok
+		}
+		v.e = append(v.e, vi)
+		LeptParseWhitespace(c) //my
+
+		// LeptParseWhitespace(c) // tutorial
+		if len(c.json) == 0 {
+			return LeptParseMissCommaOrSouareBracket
+		}
+		if c.json[0] == ',' {
+			c.json = c.json[1:]
+			// LeptParseWhitespace(c) // tutorial
+		} else if c.json[0] == ']' {
+			c.json = c.json[1:]
+			v.typ = LeptArray
+			return LeptParseOK
+		} else {
+			return LeptParseMissCommaOrSouareBracket
+		}
 	}
 }
 
@@ -660,4 +705,23 @@ func LeptSetString(v *LeptValue, s string) {
 	}
 	v.s = s
 	v.typ = LeptString
+}
+
+// LeptGetArrayElement use to get the element of array[index]
+func LeptGetArrayElement(v *LeptValue, index int) *LeptValue {
+	if v == nil || v.typ != LeptArray {
+		panic("LeptGetArrayElement v is nil or typ is not array")
+	}
+	if len(v.e) <= index {
+		panic("LeptGetArrayElement v length <= input index")
+	}
+	return v.e[index]
+}
+
+// LeptGetArraySize use to get the size of array
+func LeptGetArraySize(v *LeptValue) int {
+	if v == nil || v.typ != LeptArray {
+		panic("LeptGetArrayElement v is nil or typ is not array")
+	}
+	return len(v.e)
 }
