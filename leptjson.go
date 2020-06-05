@@ -463,6 +463,10 @@ func leptEncodeUTF8(u uint64) []byte {
 	write := binary.PutUvarint(buf, u)
 	// 这里奇怪 到底应该取 buf[:write] 还是 buf[:write-1]
 	// todo fix \u0024 unicode encoding
+	// 可能跟字节数有关，超过一定范围的数字就会有两个字节
+	if write == 1 {
+		return buf[:write]
+	}
 	return buf[:write-1]
 }
 func leptParseHex4(input string) (uint64, error) {
