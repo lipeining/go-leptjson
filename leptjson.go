@@ -16,9 +16,13 @@ var (
 )
 
 // define some global parse events
+
+// LeptEvent enums of parse event
+type LeptEvent int
+
 const (
 	// LeptParseOK just ok
-	LeptParseOK int = iota
+	LeptParseOK LeptEvent = iota
 	// LeptParseExpectValue expect value
 	LeptParseExpectValue
 	// LeptParseInvalidValue invalid value
@@ -27,31 +31,35 @@ const (
 	LeptParseRootNotSingular
 
 	// for number
+
 	// LeptParseNumberTooBig number is to big
 	LeptParseNumberTooBig
 
 	// for string
-	// LeptParseMissQuotationMark
+
+	// LeptParseMissQuotationMark miss quotation mark
 	LeptParseMissQuotationMark
-	// LeptParseInvalidStringEscape
+	// LeptParseInvalidStringEscape invalid string escape
 	LeptParseInvalidStringEscape
-	// LeptParseInvalidStringChar
+	// LeptParseInvalidStringChar invalid string char
 	LeptParseInvalidStringChar
-	// LeptParseInvalidUnicodeHex
+	// LeptParseInvalidUnicodeHex invalid unicode hex
 	LeptParseInvalidUnicodeHex
-	// LeptParseInvalidUnicodeSurrogate
+	// LeptParseInvalidUnicodeSurrogate invalid unicode surrogate
 	LeptParseInvalidUnicodeSurrogate
 
 	// for array
-	// LeptParseMissCommaOrSouareBracket
+
+	// LeptParseMissCommaOrSouareBracket miss comma or souare bracket
 	LeptParseMissCommaOrSouareBracket
 
 	// for object
-	// LeptParseMissKey
+
+	// LeptParseMissKey miss key
 	LeptParseMissKey
-	// LeptParseMissColon
+	// LeptParseMissColon miss colon
 	LeptParseMissColon
-	// LeptParseMissCommaOrCurlyBracket
+	// LeptParseMissCommaOrCurlyBracket miss cooma or curly bracket
 	LeptParseMissCommaOrCurlyBracket
 )
 
@@ -131,7 +139,7 @@ func LeptParseWhitespace(c *LeptContext) {
 }
 
 // LeptParseNull use to parse "null"
-func LeptParseNull(c *LeptContext, v *LeptValue) int {
+func LeptParseNull(c *LeptContext, v *LeptValue) LeptEvent {
 	expect(c, 'n')
 	n := len(c.json)
 	want := 4
@@ -147,7 +155,7 @@ func LeptParseNull(c *LeptContext, v *LeptValue) int {
 }
 
 // LeptParseTrue use to parse "true"
-func LeptParseTrue(c *LeptContext, v *LeptValue) int {
+func LeptParseTrue(c *LeptContext, v *LeptValue) LeptEvent {
 	expect(c, 't')
 	n := len(c.json)
 	want := 4
@@ -163,7 +171,7 @@ func LeptParseTrue(c *LeptContext, v *LeptValue) int {
 }
 
 // LeptParseFalse use to parse "false"
-func LeptParseFalse(c *LeptContext, v *LeptValue) int {
+func LeptParseFalse(c *LeptContext, v *LeptValue) LeptEvent {
 	expect(c, 'f')
 	n := len(c.json)
 	want := 5
@@ -179,7 +187,7 @@ func LeptParseFalse(c *LeptContext, v *LeptValue) int {
 }
 
 // LeptParseLiteral merge null true false
-func LeptParseLiteral(c *LeptContext, v *LeptValue, literal string, typ LeptType) int {
+func LeptParseLiteral(c *LeptContext, v *LeptValue, literal string, typ LeptType) LeptEvent {
 	expect(c, literal[0])
 	n := len(c.json)
 	want := len(literal)
@@ -197,7 +205,7 @@ func LeptParseLiteral(c *LeptContext, v *LeptValue, literal string, typ LeptType
 }
 
 // LeptParseNumber use to parse "Number"
-func LeptParseNumber(c *LeptContext, v *LeptValue) int {
+func LeptParseNumber(c *LeptContext, v *LeptValue) LeptEvent {
 	var end string
 	var err error
 	v.n, end, err = strtod(c.json)
@@ -378,7 +386,7 @@ func isDigit1to9(char byte) bool {
 }
 
 // LeptParseString use to parse string include \u
-func LeptParseString(c *LeptContext, v *LeptValue) int {
+func LeptParseString(c *LeptContext, v *LeptValue) LeptEvent {
 	s, ok := LeptParseStringRaw(c)
 	if ok != LeptParseOK {
 		return ok
@@ -403,7 +411,7 @@ func LeptParseString(c *LeptContext, v *LeptValue) int {
 // escape = %x5C          ; \
 // quotation-mark = %x22  ; "
 // unescaped = %x20-21 / %x23-5B / %x5D-10FFFF
-func LeptParseStringRaw(c *LeptContext) (string, int) {
+func LeptParseStringRaw(c *LeptContext) (string, LeptEvent) {
 	expect(c, '"')
 	var stack bytes.Buffer
 	defer stack.Truncate(0)
@@ -587,7 +595,7 @@ func leptParseHex4(input string) (uint64, error) {
 // }
 
 // LeptParseValue use to parse value switch to spec func
-func LeptParseValue(c *LeptContext, v *LeptValue) int {
+func LeptParseValue(c *LeptContext, v *LeptValue) LeptEvent {
 	n := len(c.json)
 	if n == 0 {
 		return LeptParseExpectValue
@@ -611,7 +619,7 @@ func LeptParseValue(c *LeptContext, v *LeptValue) int {
 }
 
 // LeptParseArray use to parse array
-func LeptParseArray(c *LeptContext, v *LeptValue) int {
+func LeptParseArray(c *LeptContext, v *LeptValue) LeptEvent {
 	// array = %x5B ws [ value *( ws %x2C ws value ) ] ws %x5D
 	expect(c, '[')
 	LeptParseWhitespace(c)
@@ -652,7 +660,7 @@ func LeptParseArray(c *LeptContext, v *LeptValue) int {
 }
 
 // LeptParseObject use to parse object
-func LeptParseObject(c *LeptContext, v *LeptValue) int {
+func LeptParseObject(c *LeptContext, v *LeptValue) LeptEvent {
 	// member = string ws %x3A ws value
 	// object = %x7B ws [ member *( ws %x2C ws member ) ] ws %x7D
 	expect(c, '{')
@@ -709,7 +717,7 @@ func LeptParseObject(c *LeptContext, v *LeptValue) int {
 }
 
 // LeptParse use to parse value the enter
-func LeptParse(v *LeptValue, json string) int {
+func LeptParse(v *LeptValue, json string) LeptEvent {
 	if v == nil {
 		panic("LeptParse v is nil")
 	}
