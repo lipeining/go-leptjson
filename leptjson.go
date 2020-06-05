@@ -66,7 +66,7 @@ type LeptValue struct {
 	typ LeptType
 	n   float64
 	s   string
-	e   []*LeptValue // for array
+	a   []*LeptValue // for array
 }
 
 // NewLeptValue return a init LeptValue
@@ -578,26 +578,26 @@ func LeptParseArray(c *LeptContext, v *LeptValue) int {
 	}
 	if c.json[0] == ']' {
 		v.typ = LeptArray
-		v.e = make([]*LeptValue, 0)
+		v.a = make([]*LeptValue, 0)
 		c.json = c.json[1:]
 		return LeptParseOK
 	}
 	for {
-		LeptParseWhitespace(c) // my
+		// LeptParseWhitespace(c) // my
 		vi := NewLeptValue()
 		if ok := LeptParseValue(c, vi); ok != LeptParseOK {
 			return ok
 		}
-		v.e = append(v.e, vi)
-		LeptParseWhitespace(c) //my
-
-		// LeptParseWhitespace(c) // tutorial
+		v.a = append(v.a, vi)
+		// LeptParseWhitespace(c) //my
+		// 教程中的解析 空格 时有道理的，需要在值之后解析 ws。具体参考对应的 regex 定义
+		LeptParseWhitespace(c) // tutorial
 		if len(c.json) == 0 {
 			return LeptParseMissCommaOrSouareBracket
 		}
 		if c.json[0] == ',' {
 			c.json = c.json[1:]
-			// LeptParseWhitespace(c) // tutorial
+			LeptParseWhitespace(c) // tutorial
 		} else if c.json[0] == ']' {
 			c.json = c.json[1:]
 			v.typ = LeptArray
@@ -712,10 +712,10 @@ func LeptGetArrayElement(v *LeptValue, index int) *LeptValue {
 	if v == nil || v.typ != LeptArray {
 		panic("LeptGetArrayElement v is nil or typ is not array")
 	}
-	if len(v.e) <= index {
+	if len(v.a) <= index {
 		panic("LeptGetArrayElement v length <= input index")
 	}
-	return v.e[index]
+	return v.a[index]
 }
 
 // LeptGetArraySize use to get the size of array
@@ -723,5 +723,5 @@ func LeptGetArraySize(v *LeptValue) int {
 	if v == nil || v.typ != LeptArray {
 		panic("LeptGetArrayElement v is nil or typ is not array")
 	}
-	return len(v.e)
+	return len(v.a)
 }
