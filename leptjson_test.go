@@ -5,6 +5,11 @@ import (
 	"testing"
 )
 
+func expectEQBool(t *testing.T, expect, actual bool) {
+	if expect != actual {
+		t.Errorf("parse bool, expect: %v, actual: %v", expect, actual)
+	}
+}
 func expectEQInt(t *testing.T, expect, actual int) {
 	if expect != actual {
 		t.Errorf("parse int, expect: %v, actual: %v", expect, actual)
@@ -525,6 +530,60 @@ func TestAccessString(t *testing.T) {
 	expectEQString(t, "Hello", LeptGetString(v))
 }
 
+func TestAccessObject(t *testing.T) {
+	o := NewLeptValue()
+	for j := 0; j <= 5; j += 5 {
+		LeptSetObject(o)
+		expectEQInt(t, 0, LeptGetObjectSize(o))
+		for i := 0; i < 10; i++ {
+			key := 'a' + i
+			v := NewLeptValue()
+			LeptSetNumber(v, float64(i))
+			LeptMove(LeptSetObjectValue(o, string(key)), v)
+		}
+		expectEQInt(t, 10, LeptGetObjectSize(o))
+		for i := 0; i < 10; i++ {
+			key := 'a' + i
+			index := LeptFindObjectIndex(o, string(key))
+			expectEQBool(t, true, index-LeptKeyNotExist != 0)
+			pv := LeptGetObjectValue(o, index)
+			expectEQFloat64(t, float64(i), LeptGetNumber(pv))
+		}
+	}
+	{
+		index := LeptFindObjectIndex(o, "j")
+		expectEQBool(t, true, index-LeptKeyNotExist != 0)
+		LeptRemoveObjectValue(o, index)
+		index = LeptFindObjectIndex(o, "j")
+		expectEQInt(t, index, LeptKeyNotExist)
+		expectEQInt(t, 9, LeptGetObjectSize(o))
+	}
+	{
+		index := LeptFindObjectIndex(o, "a")
+		expectEQBool(t, true, index-LeptKeyNotExist != 0)
+		LeptRemoveObjectValue(o, index)
+		index = LeptFindObjectIndex(o, "a")
+		expectEQInt(t, index, LeptKeyNotExist)
+		expectEQInt(t, 8, LeptGetObjectSize(o))
+	}
+	{
+		for i := 0; i < 8; i++ {
+			key := 'a' + i + 1
+			index := LeptFindObjectIndex(o, string(key))
+			expectEQBool(t, true, index-LeptKeyNotExist != 0)
+			pv := LeptGetObjectValue(o, index)
+			expectEQFloat64(t, float64(i+1), LeptGetNumber(pv))
+		}
+	}
+	{
+		v := NewLeptValue()
+		LeptSetString(v, "Hello")
+		LeptMove(LeptSetObjectValue(o, "World"), v)
+		pv := LeptFindObjectValue(o, "World")
+		expectEQBool(t, true, pv != nil)
+		expectEQString(t, "Hello", LeptGetString(pv))
+	}
+}
 func TestLeptStringify(t *testing.T) {
 	bases := []struct {
 		input string
@@ -588,29 +647,90 @@ func TestLeptStringify(t *testing.T) {
 		expectEQString(t, c.input, actual)
 	}
 
-	// arrays := []struct {
-	// 	input string
-	// }{
-	// 	{"[]"},
-	// 	{"[null,false,true,123,\"abc\",[1,2,3]]"},
-	// }
-	// for _, c := range arrays {
-	// 	v := NewLeptValue()
-	// 	expectEQLeptEvent(t, LeptParseOK, LeptParse(v, c.input))
-	// 	actual := LeptStringify(v)
-	// 	expectEQString(t, c.input, actual)
-	// }
+	arrays := []struct {
+		input string
+	}{
+		{"[]"},
+		{"[null,false,true,123,\"abc\",[1,2,3]]"},
+	}
+	for _, c := range arrays {
+		v := NewLeptValue()
+		expectEQLeptEvent(t, LeptParseOK, LeptParse(v, c.input))
+		actual := LeptStringify(v)
+		expectEQString(t, c.input, actual)
+	}
 
-	// objects := []struct {
-	// 	input string
-	// }{
-	// 	{"{}"},
-	// 	{"{\"n\":null,\"f\":false,\"t\":true,\"i\":123,\"s\":\"abc\",\"a\":[1,2,3],\"o\":{\"1\":1,\"2\":2,\"3\":3}}"},
-	// }
-	// for _, c := range objects {
-	// 	v := NewLeptValue()
-	// 	expectEQLeptEvent(t, LeptParseOK, LeptParse(v, c.input))
-	// 	actual := LeptStringify(v)
-	// 	expectEQString(t, c.input, actual)
-	// }
+	objects := []struct {
+		input string
+	}{
+		{"{}"},
+		{"{\"n\":null,\"f\":false,\"t\":true,\"i\":123,\"s\":\"abc\",\"a\":[1,2,3],\"o\":{\"1\":1,\"2\":2,\"3\":3}}"},
+	}
+	for _, c := range objects {
+		v := NewLeptValue()
+		expectEQLeptEvent(t, LeptParseOK, LeptParse(v, c.input))
+		actual := LeptStringify(v)
+		expectEQString(t, c.input, actual)
+	}
+}
+
+func TestLeptIsEqual(t *testing.T) {
+	valid := []struct {
+		inputLeft  string
+		inputRight string
+		expect     bool
+	}{
+		{"true", "true", true},
+		{"true", "false", false},
+		{"false", "false", true},
+		{"null", "null", true},
+		{"null", "0", false},
+		{"123", "123", true},
+		{"123", "456", false},
+		{"\"abc\"", "\"abc\"", true},
+		{"\"abc\"", "\"abcd\"", false},
+		{"[]", "[]", true},
+		{"[]", "null", false},
+		{"[1,2,3]", "[1,2,3]", true},
+		{"[1,2,3]", "[1,2,3,4]", false},
+		{"[[]]", "[[]]", true},
+		{"{}", "{}", true},
+		{"{}", "null", false},
+		{"{}", "[]", false},
+		{"{\"a\":1,\"b\":2}", "{\"a\":1,\"b\":2}", true},
+		{"{\"a\":1,\"b\":2}", "{\"b\":2,\"a\":1}", true},
+		{"{\"a\":1,\"b\":2}", "{\"a\":1,\"b\":3}", false},
+		{"{\"a\":1,\"b\":2}", "{\"a\":1,\"b\":2,\"c\":3}", false},
+		{"{\"a\":{\"b\":{\"c\":{}}}}", "{\"a\":{\"b\":{\"c\":{}}}}", true},
+		{"{\"a\":{\"b\":{\"c\":{}}}}", "{\"a\":{\"b\":{\"c\":[]}}}", false},
+	}
+	for _, c := range valid {
+		vl, vr := NewLeptValue(), NewLeptValue()
+		expectEQLeptEvent(t, LeptParseOK, LeptParse(vl, c.inputLeft))
+		expectEQLeptEvent(t, LeptParseOK, LeptParse(vr, c.inputRight))
+		expectEQBool(t, c.expect, LeptIsEqual(vl, vr))
+	}
+}
+func TestLeptCopy(t *testing.T) {
+	vl, vr := NewLeptValue(), NewLeptValue()
+	LeptParse(vl, "{\"t\":true,\"f\":false,\"n\":null,\"d\":1.5,\"a\":[1,2,3]}")
+	LeptCopy(vr, vl)
+	expectEQBool(t, true, LeptIsEqual(vl, vr))
+}
+func TestLeptMove(t *testing.T) {
+	vl, vr, vo := NewLeptValue(), NewLeptValue(), NewLeptValue()
+	LeptParse(vl, "{\"t\":true,\"f\":false,\"n\":null,\"d\":1.5,\"a\":[1,2,3]}")
+	LeptCopy(vr, vl)
+	expectEQBool(t, true, LeptIsEqual(vl, vr))
+	LeptMove(vo, vr)
+	expectEQLeptType(t, LeptNull, LeptGetType(vr))
+	expectEQBool(t, true, LeptIsEqual(vo, vl))
+}
+func TestLeptSwap(t *testing.T) {
+	vl, vr := NewLeptValue(), NewLeptValue()
+	LeptSetString(vl, "Hello")
+	LeptSetString(vr, "World")
+	LeptSwap(vl, vr)
+	expectEQString(t, "World", LeptGetString(vl))
+	expectEQString(t, "Hello", LeptGetString(vr))
 }

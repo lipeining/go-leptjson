@@ -63,6 +63,9 @@ const (
 	LeptParseMissCommaOrCurlyBracket
 )
 
+// LeptKeyNotExist object key not exist
+const LeptKeyNotExist int = -1
+
 // LeptType enums of json type
 type LeptType int
 
@@ -101,7 +104,7 @@ type LeptValue struct {
 // NewLeptValue return a init LeptValue
 func NewLeptValue() *LeptValue {
 	return &LeptValue{
-		typ: LeptFalse,
+		typ: LeptNull,
 	}
 }
 
@@ -742,6 +745,21 @@ func LeptGetType(v *LeptValue) LeptType {
 	return v.typ
 }
 
+// LeptInit init v
+func LeptInit(v *LeptValue) {
+	v.typ = LeptNull
+}
+
+// LeptFree free the memory
+func LeptFree(v *LeptValue) {
+	// v = NewLeptValue()
+	v.typ = LeptNull
+	v.n = 0.0
+	v.s = ""
+	v.a = nil
+	v.o = nil
+}
+
 // LeptSetNull use to set the type of null
 func LeptSetNull(v *LeptValue) {
 	if v == nil {
@@ -980,4 +998,198 @@ func leptStringifyObject(v *LeptValue) string {
 	}
 	buf.WriteByte('}')
 	return buf.String()
+}
+
+// LeptCopy copy from src to dst
+func LeptCopy(dst, src *LeptValue) bool {
+	if dst == nil || src == nil {
+		panic("src or dst is nil")
+	}
+	if dst == src {
+		panic("src == dst")
+	}
+	switch src.typ {
+	case LeptNull:
+		LeptSetNull(dst)
+	case LeptFalse:
+		LeptSetBoolean(dst, 0)
+	case LeptTrue:
+		LeptSetBoolean(dst, 1)
+	case LeptNumber:
+		LeptSetNumber(dst, src.n)
+	case LeptString:
+		LeptSetString(dst, src.s)
+	case LeptArray:
+		for i := 0; i < len(src.a); i++ {
+			ai := NewLeptValue()
+			if ok := LeptCopy(ai, src.a[i]); !ok {
+				return ok
+			}
+			dst.a = append(dst.a, ai)
+		}
+		dst.typ = LeptArray
+	case LeptObject:
+		for i := 0; i < len(src.o); i++ {
+			oi := NewLeptValue()
+			if ok := LeptCopy(oi, src.o[i].value); !ok {
+				return ok
+			}
+			dst.o = append(dst.o, &LeptMember{key: src.o[i].key, value: oi})
+		}
+		dst.typ = LeptObject
+	default:
+		return false
+	}
+	return true
+}
+
+// LeptMove move from src to dst
+func LeptMove(dst, src *LeptValue) bool {
+	if dst == nil || src == nil {
+		panic("src or dst is nil")
+	}
+	if dst == src {
+		panic("src == dst")
+	}
+	LeptFree(dst)
+	dst.typ = src.typ
+	dst.n = src.n
+	dst.s = src.s
+	dst.a = src.a
+	dst.o = src.o
+	LeptFree(src)
+	return true
+}
+
+// LeptSwap swap lhs rhs
+func LeptSwap(lhs, rhs *LeptValue) bool {
+	if lhs == nil || rhs == nil {
+		panic("rhs or lhs is nil")
+	}
+	if lhs == rhs {
+		panic("rhs == lhs")
+	}
+	lhs.typ, rhs.typ = rhs.typ, lhs.typ
+	lhs.n, rhs.n = rhs.n, lhs.n
+	lhs.s, rhs.s = rhs.s, lhs.s
+	lhs.a, rhs.a = rhs.a, lhs.a
+	lhs.o, rhs.o = rhs.o, lhs.o
+	return true
+}
+
+// LeptIsEqual check lhs rhs is equal
+func LeptIsEqual(lhs, rhs *LeptValue) bool {
+	if lhs == nil || rhs == nil {
+		panic("rhs or lhs is nil")
+	}
+	if lhs == rhs {
+		return true
+	}
+	if lhs.typ != rhs.typ {
+		return false
+	}
+	switch lhs.typ {
+	case LeptNull:
+		return true
+	case LeptFalse:
+		return true
+	case LeptTrue:
+		return true
+	case LeptNumber:
+		return lhs.n == rhs.n
+	case LeptString:
+		return lhs.s == rhs.s
+	case LeptArray:
+		if len(lhs.a) != len(rhs.a) {
+			return false
+		}
+		for i := 0; i < len(lhs.a); i++ {
+			if !LeptIsEqual(lhs.a[i], rhs.a[i]) {
+				return false
+			}
+		}
+		return true
+	case LeptObject:
+		if len(lhs.o) != len(rhs.o) {
+			return false
+		}
+		for i := 0; i < len(lhs.o); i++ {
+			key := lhs.o[i].key
+			value := LeptFindObjectValue(rhs, key)
+			if value == nil {
+				return false
+			}
+			if !LeptIsEqual(lhs.o[i].value, value) {
+				return false
+			}
+		}
+		return true
+	default:
+		return false
+	}
+}
+
+// LeptFindObjectIndex find index
+func LeptFindObjectIndex(v *LeptValue, key string) int {
+	if v == nil || v.typ != LeptObject {
+		panic("LeptFindObjectIndex v is nil or typ is not object")
+	}
+	for i := 0; i < len(v.o); i++ {
+		if v.o[i].key == key {
+			return i
+		}
+	}
+	return LeptKeyNotExist
+}
+
+// LeptFindObjectValue find value
+func LeptFindObjectValue(v *LeptValue, key string) *LeptValue {
+	index := LeptFindObjectIndex(v, key)
+	if index == LeptKeyNotExist {
+		return nil
+	}
+	return v.o[index].value
+}
+
+// LeptSetObject set object value
+func LeptSetObject(v *LeptValue) {
+	if v == nil {
+		panic("LeptSetObject v is nil")
+	}
+	LeptFree(v)
+	v.o = make([]*LeptMember, 0)
+	v.typ = LeptObject
+}
+
+// LeptSetObjectValue set object value
+func LeptSetObjectValue(v *LeptValue, key string) *LeptValue {
+	if v == nil || v.typ != LeptObject {
+		panic("LeptSetObjectValue v is nil or typ is not object")
+	}
+	value := LeptFindObjectValue(v, key)
+	if value != nil {
+		return value
+	}
+	member := &LeptMember{key: key, value: NewLeptValue()}
+	v.o = append(v.o, member)
+	return member.value
+}
+
+// LeptRemoveObjectValue remove object value
+func LeptRemoveObjectValue(v *LeptValue, index int) {
+	if v == nil || v.typ != LeptObject {
+		panic("LeptRemoveObjectValue v is nil or typ is not object")
+	}
+	size := len(v.o)
+	if index >= size || index < 0 {
+		panic("LeptRemoveObjectValue index >= size || index < 0")
+	}
+	// for i := index; i < size-1; i++ {
+	// 	v.o[i] = v.o[i+1]
+	// }
+	// v.o = v.o[:size-1]
+	next := make([]*LeptMember, size-1)
+	copy(next, v.o[:index])
+	copy(next, v.o[index+1:])
+	v.o = next
 }
