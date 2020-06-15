@@ -9,7 +9,13 @@ leptjson 使用 int 作为解析错误的返回值，这里是否需要修改
 1.自定义 error 类型，使用 go 的 err != nil 方式
 2.使用 int 的一个类型，结构保持一致， ErrorType == 0 || 1 || 2 || 3
 
-
+### number
+```md
+	// number = [ "-" ] int [ frac ] [ exp ]
+	// int = "0" / digit1-9 *digit
+	// frac = "." 1*digit
+	// exp = ("e" / "E") ["-" / "+"] 1*digit
+```
 ### string
 ```md
 string = quotation-mark *char quotation-mark
@@ -57,6 +63,33 @@ if (u >= 0x0800 && u <= 0xFFFF) {
 ~~fix 对于 uint64 转为输出的 hex 字符串需要如何处理，现在是使用 []byte 结合 buffer 生成，
 也就是关于 go 这些格式数据的转化问题不清晰明了
 
+对于 uxxxx 的 utf8 编码字符串，需要考虑代理对的问题，
+对于 u >= 0xD800 && u <= 0xDBFF
+u = (((u - 0xD800) << 10) | (u2 - 0xDC00)) + 0x10000
+更新对应的字符串的值。
+而对于 u 可以区分四个区间的值，参考
+```go
+// 	// 针对 四个区间         码点位数   字节1      字节2      字节3     字节4
+// 	// 0x0000 - 0x007F      7         0xxxxxxx
+// 	// 0x0080 - 0x07FF      11        1100xxxx   10xxxxxx
+// 	// 0x0800 - 0xFFFF      16        1110xxxx   10xxxxxx  10xxxxxx
+// 	// 0x10000 - 0x10FFFF   21        11110xxx   10xxxxxx  10xxxxxx  10xxxxxx
+
+func leptEncodeUTF8(u uint64) []byte {
+	bufSize := 8
+	buf := make([]byte, bufSize)
+	write := binary.PutUvarint(buf, u)
+	// 这里奇怪 到底应该取 buf[:write] 还是 buf[:write-1]
+	// todo fix \u0024 unicode encoding
+	// 可能跟字节数有关，超过一定范围的数字就会有两个字节
+	if write == 1 {
+		return buf[:write]
+	}
+	return buf[:write-1]
+}
+```
+所以对于 u，针对每一个区间计算出对应的 uint64，再使用 leptEncodeUTF8 得到可以写入 buffer 的 []byte 数组
+buffer.String() 可以得到完整的 utf8 解码字符串
 
 ### array
 ```md
@@ -72,3 +105,37 @@ JSON 对象和 JSON 数组非常相似，区别包括 JSON 对象以花括号 {}
 member = string ws %x3A ws value
 object = %x7B ws [ member *( ws %x2C ws member ) ] ws %x7D
 ```
+### array object
+两者大体解析过程是相似的，不过存放的地址不同，object 多了解析 key 值得步骤。
+这里都是使用 slice 存储具体值，可以针对 object 优化实现哈希链表的结构，更加高效。
+
+### interface{}
+golang 提供的对象是 interface{} 可以存储 nil,bool,number,string,slice,map 
+提供三个方法解析 LeptValue
+```go
+func ToInterface(v *LeptValue) interface{} {
+}
+func ToMap(v *LeptValue) map[string]interface{} {
+}
+func ToArray(v *LeptValue) []interface{} {
+}
+```
+在对应的基础上，可以使用 []struct{} struct{} 实现 encoding/json 中的
+方法，将 json 字符串映射到 struct 中。
+```go
+func ToStruct(v *LeptValue, structure interface{}) error {
+}
+// ToStruct(v, &struct{a int, b string}{})
+// ToStruct(v, &[]struct{a int, b string}{})
+```
+映射为 struct 时，以传入的 struct 为参考，如果 v 的类型或者值不对应的话，会返回错误。
+对于初始化的值，不知道是否有默认值，现时，struct 的全部字段都会设置默认值。
+```go
+{<nil> false true 123 abc [] map[]}
+```
+未知原因导致 数组和 map 解析不正确
+数组需要初始化为一个合适的 cap 的 slice
+map 需要知道 key value 的 Type
+方法：
+reflect.TypeOf(m).Key()
+reflect.TypeOf(m).Elem()

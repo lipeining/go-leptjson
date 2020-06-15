@@ -1,6 +1,8 @@
 package goleptjson
 
 import (
+	"fmt"
+	"reflect"
 	"strconv"
 	"testing"
 )
@@ -733,4 +735,257 @@ func TestLeptSwap(t *testing.T) {
 	LeptSwap(vl, vr)
 	expectEQString(t, "World", LeptGetString(vl))
 	expectEQString(t, "Hello", LeptGetString(vr))
+}
+
+func TestToMap(t *testing.T) {
+	input := " { " +
+		"\"n\" : null , " +
+		"\"f\" : false , " +
+		"\"t\" : true , " +
+		"\"i\" : 123 , " +
+		"\"s\" : \"abc\", " +
+		"\"a\" : [ 1, 2, 3 ]," +
+		"\"o\" : { \"1\" : 1, \"2\" : 2, \"3\" : 3 }" +
+		" } "
+	v := NewLeptValue()
+	expectEQLeptEvent(t, LeptParseOK, LeptParse(v, input))
+	// fmt.Println(ToInterface(v))
+	// fmt.Println(ToMap(v))
+	{
+		i := ToInterface(v)
+		if v, iok := i.(map[string]interface{}); !iok {
+			t.Errorf("ToInterface expect map[string]interface{} to be ok")
+		} else {
+			size := len(v)
+			if size != 7 {
+				t.Errorf("map size to be 7")
+			}
+			if vi, ok := v["n"]; !ok {
+				t.Errorf("map[n] should exist")
+			} else if vi != nil {
+				t.Errorf("map[n] should be nil")
+			}
+			if vi, ok := v["t"]; !ok {
+				t.Errorf("map[t] should exist")
+			} else {
+				if viT, viok := vi.(bool); !viok || viT != true {
+					t.Errorf("map[t] should be true")
+				}
+			}
+			if vi, ok := v["f"]; !ok {
+				t.Errorf("map[f] should exist")
+			} else {
+				if viT, viok := vi.(bool); !viok || viT != false {
+					t.Errorf("map[f] should be false")
+				}
+			}
+			if vi, ok := v["i"]; !ok {
+				t.Errorf("map[i] should exist")
+			} else {
+				if viT, viok := vi.(float64); !viok || viT != 123 {
+					t.Errorf("map[i] should be float64")
+				}
+			}
+			if vi, ok := v["s"]; !ok {
+				t.Errorf("map[s] should exist")
+			} else {
+				if viT, viok := vi.(string); !viok || viT != "abc" {
+					t.Errorf("map[s] should be string")
+				}
+			}
+			if vi, ok := v["a"]; !ok {
+				t.Errorf("map[a] should exist")
+			} else {
+				if viT, viok := vi.([]interface{}); !viok || len(viT) != 3 {
+					t.Errorf("map[a] should be array")
+				}
+			}
+			if vi, ok := v["o"]; !ok {
+				t.Errorf("map[o] should exist")
+			} else {
+				if viT, viok := vi.(map[string]interface{}); !viok || len(viT) != 3 {
+					t.Errorf("map[o] should be object")
+				}
+			}
+		}
+	}
+}
+func TestToArray(t *testing.T) {
+	input := "[null, true, false, 123, \"abc\", [ 1, 2, 3 ], { \"1\" : 1, \"2\" : 2, \"3\" : 3 }]"
+	v := NewLeptValue()
+	expectEQLeptEvent(t, LeptParseOK, LeptParse(v, input))
+	// fmt.Println(ToInterface(v))
+	// fmt.Println(ToArray(v))
+	{
+		i := ToInterface(v)
+		if v, iok := i.([]interface{}); !iok {
+			t.Errorf("ToInterface expect []interface{} to be ok")
+		} else {
+			size := len(v)
+			if size != 7 {
+				t.Errorf("array size to be 7")
+			}
+			if v[0] != nil {
+				t.Errorf("v[0] should be nil")
+			}
+			if viT, viok := v[1].(bool); !viok || viT != true {
+				t.Errorf("v[1] should be true")
+			}
+			if viT, viok := v[2].(bool); !viok || viT != false {
+				t.Errorf("v[2] should be false")
+			}
+			if viT, viok := v[3].(float64); !viok || viT != 123 {
+				t.Errorf("v[3] should be float64")
+			}
+			if viT, viok := v[4].(string); !viok || viT != "abc" {
+				t.Errorf("v[4] should be string")
+			}
+			if viT, viok := v[5].([]interface{}); !viok || len(viT) != 3 {
+				t.Errorf("v[5] should be array")
+			}
+			if viT, viok := v[6].(map[string]interface{}); !viok || len(viT) != 3 {
+				t.Errorf("v[6] should be object")
+			}
+		}
+	}
+}
+func TestToStruct(t *testing.T) {
+	input := " { " +
+		"\"N\" : null , " +
+		"\"F\" : false , " +
+		"\"T\" : true , " +
+		"\"I\" : 123 , " +
+		"\"S\" : \"abc\", " +
+		"\"A\" : [ 1, 2, 3 ]," +
+		"\"O\" : { \"1\" : 1, \"2\" : 2, \"3\" : 3 }" +
+		" } "
+	// input := " { " +
+	// 	"\"n\" : null , " +
+	// 	"\"f\" : false , " +
+	// 	"\"t\" : true , " +
+	// 	"\"i\" : 123 , " +
+	// 	"\"s\" : \"abc\", " +
+	// 	"\"a\" : [ 1, 2, 3 ]," +
+	// 	"\"o\" : { \"1\" : 1, \"2\" : 2, \"3\" : 3 }" +
+	// 	" } "
+	v := NewLeptValue()
+	expectEQLeptEvent(t, LeptParseOK, LeptParse(v, input))
+	// fmt.Println(ToInterface(v))
+	// fmt.Println(ToMap(v))
+	type obj struct {
+		N interface{}    `json:"n"`
+		F bool           `json:"f"`
+		T bool           `json:"t"`
+		I int            `json:"i"`
+		S string         `json:"s"`
+		A []int          `json:"a"`
+		O map[string]int `json:"o"`
+	}
+	{
+		structure := obj{}
+		err := ToStruct(v, &structure)
+		if err != nil {
+			t.Errorf("ToStruct expect no err: %v", err)
+		} else {
+			fmt.Println(structure)
+			// if vi := *structure.n; !ok {
+			// 	t.Errorf("map[n] should exist")
+			// } else if vi != nil {
+			// 	t.Errorf("map[n] should be nil")
+			// }
+			// if vi, ok := v["t"]; !ok {
+			// 	t.Errorf("map[t] should exist")
+			// } else {
+			// 	if viT, viok := vi.(bool); !viok || viT != true {
+			// 		t.Errorf("map[t] should be true")
+			// 	}
+			// }
+			// if vi, ok := v["f"]; !ok {
+			// 	t.Errorf("map[f] should exist")
+			// } else {
+			// 	if viT, viok := vi.(bool); !viok || viT != false {
+			// 		t.Errorf("map[f] should be false")
+			// 	}
+			// }
+			// if vi, ok := v["i"]; !ok {
+			// 	t.Errorf("map[i] should exist")
+			// } else {
+			// 	if viT, viok := vi.(float64); !viok || viT != 123 {
+			// 		t.Errorf("map[i] should be float64")
+			// 	}
+			// }
+			// if vi, ok := v["s"]; !ok {
+			// 	t.Errorf("map[s] should exist")
+			// } else {
+			// 	if viT, viok := vi.(string); !viok || viT != "abc" {
+			// 		t.Errorf("map[s] should be string")
+			// 	}
+			// }
+			// if vi, ok := v["a"]; !ok {
+			// 	t.Errorf("map[a] should exist")
+			// } else {
+			// 	if viT, viok := vi.([]interface{}); !viok || len(viT) != 3 {
+			// 		t.Errorf("map[a] should be array")
+			// 	}
+			// }
+			// if vi, ok := v["o"]; !ok {
+			// 	t.Errorf("map[o] should exist")
+			// } else {
+			// 	if viT, viok := vi.(map[string]interface{}); !viok || len(viT) != 3 {
+			// 		t.Errorf("map[o] should be object")
+			// 	}
+			// }
+		}
+	}
+}
+func TestToStructArray(t *testing.T) {
+	input := "[null, true, false, 123, \"abc\", [ 1, 2, 3 ], { \"1\" : 1, \"2\" : 2, \"3\" : 3 }]"
+	v := NewLeptValue()
+	expectEQLeptEvent(t, LeptParseOK, LeptParse(v, input))
+	// fmt.Println(ToInterface(v))
+	// fmt.Println(ToArray(v))
+	{
+		i := ToInterface(v)
+		if v, iok := i.([]interface{}); !iok {
+			t.Errorf("ToInterface expect []interface{} to be ok")
+		} else {
+			size := len(v)
+			if size != 7 {
+				t.Errorf("array size to be 7")
+			}
+			if v[0] != nil {
+				t.Errorf("v[0] should be nil")
+			}
+			if viT, viok := v[1].(bool); !viok || viT != true {
+				t.Errorf("v[1] should be true")
+			}
+			if viT, viok := v[2].(bool); !viok || viT != false {
+				t.Errorf("v[2] should be false")
+			}
+			if viT, viok := v[3].(float64); !viok || viT != 123 {
+				t.Errorf("v[3] should be float64")
+			}
+			if viT, viok := v[4].(string); !viok || viT != "abc" {
+				t.Errorf("v[4] should be string")
+			}
+			if viT, viok := v[5].([]interface{}); !viok || len(viT) != 3 {
+				t.Errorf("v[5] should be array")
+			}
+			if viT, viok := v[6].(map[string]interface{}); !viok || len(viT) != 3 {
+				t.Errorf("v[6] should be object")
+			}
+		}
+	}
+}
+
+func TestSetValue(t *testing.T) {
+	v := struct {
+		A bool
+	}{}
+	// 检查 func(rv reflect.Value) 能否修改 rv 的值，这里是否是引用？
+	// 结果是可以修改的，保证了递归的正确性
+	rv := reflect.ValueOf(&v)
+	rv = rv.Elem()
+	setValue(rv.Field(0))
+	fmt.Println(rv)
 }
