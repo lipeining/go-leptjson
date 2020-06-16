@@ -139,3 +139,12 @@ map 需要知道 key value 的 Type
 方法：
 reflect.TypeOf(m).Key()
 reflect.TypeOf(m).Elem()
+```GO
+// 生成的 rvt 是 reflect.flag.mustBeAssignable using unaddressable value
+// 导致无法在 toMap 之后得到 rvt 的值。
+// false false string map[string]interface {} true map[]
+rvt := reflect.MakeMapWithSize(reflect.MapOf(reflect.TypeOf("abc"), rv.Type()), len(v.o))
+fmt.Println(rvt.CanAddr(), rvt.CanSet(), reflect.TypeOf("abc"), reflect.MapOf(reflect.TypeOf("abc"), rv.Type()), rvt.CanInterface(), rvt)
+toMap(v, rvt)
+rv.Set(rvt)
+```

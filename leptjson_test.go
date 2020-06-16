@@ -888,53 +888,39 @@ func TestToStruct(t *testing.T) {
 			t.Errorf("ToStruct expect no err: %v", err)
 		} else {
 			fmt.Println(structure)
-			// if vi := *structure.n; !ok {
-			// 	t.Errorf("map[n] should exist")
-			// } else if vi != nil {
-			// 	t.Errorf("map[n] should be nil")
-			// }
-			// if vi, ok := v["t"]; !ok {
-			// 	t.Errorf("map[t] should exist")
-			// } else {
-			// 	if viT, viok := vi.(bool); !viok || viT != true {
-			// 		t.Errorf("map[t] should be true")
-			// 	}
-			// }
-			// if vi, ok := v["f"]; !ok {
-			// 	t.Errorf("map[f] should exist")
-			// } else {
-			// 	if viT, viok := vi.(bool); !viok || viT != false {
-			// 		t.Errorf("map[f] should be false")
-			// 	}
-			// }
-			// if vi, ok := v["i"]; !ok {
-			// 	t.Errorf("map[i] should exist")
-			// } else {
-			// 	if viT, viok := vi.(float64); !viok || viT != 123 {
-			// 		t.Errorf("map[i] should be float64")
-			// 	}
-			// }
-			// if vi, ok := v["s"]; !ok {
-			// 	t.Errorf("map[s] should exist")
-			// } else {
-			// 	if viT, viok := vi.(string); !viok || viT != "abc" {
-			// 		t.Errorf("map[s] should be string")
-			// 	}
-			// }
-			// if vi, ok := v["a"]; !ok {
-			// 	t.Errorf("map[a] should exist")
-			// } else {
-			// 	if viT, viok := vi.([]interface{}); !viok || len(viT) != 3 {
-			// 		t.Errorf("map[a] should be array")
-			// 	}
-			// }
-			// if vi, ok := v["o"]; !ok {
-			// 	t.Errorf("map[o] should exist")
-			// } else {
-			// 	if viT, viok := vi.(map[string]interface{}); !viok || len(viT) != 3 {
-			// 		t.Errorf("map[o] should be object")
-			// 	}
-			// }
+			if vi := structure.N; vi != nil {
+				t.Errorf("obj.N should be nil")
+			}
+			if vi := structure.F; vi != false {
+				t.Errorf("obj.F should be false")
+			}
+			if vi := structure.T; vi != true {
+				t.Errorf("obj.T should be true")
+			}
+			if vi := structure.I; vi != 123 {
+				t.Errorf("obj.I should be 123")
+			}
+			if vi := structure.S; vi != "abc" {
+				t.Errorf("obj.S should be \"abc\"")
+			}
+			if vi := structure.A; len(vi) != 3 {
+				t.Errorf("obj.A should be slice and len = 3 ")
+			} else {
+				for j := 0; j < 3; j++ {
+					if vi[j] != j+1 {
+						t.Errorf("obj.A[%v] should be %v ", j, j+1)
+					}
+				}
+			}
+			if vi := structure.O; len(vi) != 3 {
+				t.Errorf("obj.O should be map and len = 3 ")
+			} else {
+				for jindex, j := range []string{"1", "2", "3"} {
+					if vi[j] != jindex+1 {
+						t.Errorf("obj.O[%v] should be %v ", j, jindex+1)
+					}
+				}
+			}
 		}
 	}
 }
@@ -945,35 +931,44 @@ func TestToStructArray(t *testing.T) {
 	// fmt.Println(ToInterface(v))
 	// fmt.Println(ToArray(v))
 	{
-		i := ToInterface(v)
-		if v, iok := i.([]interface{}); !iok {
-			t.Errorf("ToInterface expect []interface{} to be ok")
+		var structure []interface{}
+		if err := ToStruct(v, &structure); err != nil {
+			t.Errorf("ToStruct expect no err: %v", err)
 		} else {
-			size := len(v)
-			if size != 7 {
-				t.Errorf("array size to be 7")
+			fmt.Println(structure)
+			if vi := structure[0]; vi != nil {
+				t.Errorf("array[0] should be nil")
 			}
-			if v[0] != nil {
-				t.Errorf("v[0] should be nil")
+			if viT, viok := structure[1].(bool); !viok || viT != true {
+				t.Errorf("structure[1] should be true")
 			}
-			if viT, viok := v[1].(bool); !viok || viT != true {
-				t.Errorf("v[1] should be true")
+			if viT, viok := structure[2].(bool); !viok || viT != false {
+				t.Errorf("structure[2] should be false")
 			}
-			if viT, viok := v[2].(bool); !viok || viT != false {
-				t.Errorf("v[2] should be false")
+			if viT, viok := structure[3].(float64); !viok || viT != 123 {
+				t.Errorf("structure[3] should be float64")
 			}
-			if viT, viok := v[3].(float64); !viok || viT != 123 {
-				t.Errorf("v[3] should be float64")
+			if viT, viok := structure[4].(string); !viok || viT != "abc" {
+				t.Errorf("structure[4] should be string")
 			}
-			if viT, viok := v[4].(string); !viok || viT != "abc" {
-				t.Errorf("v[4] should be string")
+			if viT, viok := structure[5].([]interface{}); !viok || len(viT) != 3 {
+				t.Errorf("structure[5] should be array")
+			} else {
+				for j := 0; j < 3; j++ {
+					if vitj, vijok := viT[j].(float64); !vijok || vitj != float64(j+1) {
+						t.Errorf("array[0][%v] should be %v ", j, j+1)
+					}
+				}
 			}
-			if viT, viok := v[5].([]interface{}); !viok || len(viT) != 3 {
-				t.Errorf("v[5] should be array")
-			}
-			if viT, viok := v[6].(map[string]interface{}); !viok || len(viT) != 3 {
-				t.Errorf("v[6] should be object")
-			}
+			// if viT, viok := structure[6].(map[string]interface{}); !viok || len(viT) != 3 {
+			// 	t.Errorf("structure[6] should be object")
+			// } else {
+			// 	for jindex, j := range []string{"1", "2", "3"} {
+			// 		if vitj, vijok := viT[j].(float64); !vijok || vitj != float64(jindex+1) {
+			// 			t.Errorf("array[0][%v] should be %v ", j, jindex+1)
+			// 		}
+			// 	}
+			// }
 		}
 	}
 }

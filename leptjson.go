@@ -1280,7 +1280,41 @@ func toValue(v *LeptValue, rv reflect.Value) error {
 	}
 	switch rv.Kind() {
 	case reflect.Interface:
-		rv.Set(reflect.Zero(rv.Type()))
+		// 可能对应的 rv 为 []interface{}
+		if v == nil {
+			rv.Set(reflect.Zero(rv.Type()))
+		} else {
+			// 不能在 interface 上面进行各种 SetBool, SetFloat 操作
+			switch v.typ {
+			case LeptNull:
+				rv.Set(reflect.Zero(rv.Type()))
+			case LeptFalse:
+				rv.Set(reflect.ValueOf(false))
+			case LeptTrue:
+				rv.Set(reflect.ValueOf(true))
+			case LeptNumber:
+				rv.Set(reflect.ValueOf(v.n))
+			case LeptString:
+				rv.Set(reflect.ValueOf(v.s))
+			case LeptArray:
+				rvt := reflect.MakeSlice(reflect.SliceOf(rv.Type()), len(v.a), len(v.a))
+				toSlice(v, rvt)
+				rv.Set(rvt)
+			case LeptObject:
+				// rvt := reflect.MakeMapWithSize(reflect.MapOf(reflect.TypeOf("abc"), rv.Type()), len(v.o))
+				// rvt := reflect.MakeMap(reflect.MapOf(reflect.TypeOf("abc"), rv.Type()))
+				// mapStringInt := make(map[string]interface{})
+				// mapType := reflect.TypeOf(mapStringInt)
+				// rvt := reflect.MakeMap(mapType)
+				// rvt.SetMapIndex(reflect.ValueOf("abc"), reflect.ValueOf(1))
+				// fmt.Println(rvt.CanAddr(), rvt.CanSet(), reflect.TypeOf("abc"), reflect.MapOf(reflect.TypeOf("abc"), rv.Type()), rvt.CanInterface(), rvt)
+				// toMap(v, rvt)
+				// rv.Set(rvt)
+				rv.Set(reflect.Zero(rv.Type()))
+			default:
+				rv.Set(reflect.Zero(rv.Type()))
+			}
+		}
 	case reflect.Bool:
 		if v == nil {
 			rv.SetBool(false)
@@ -1430,6 +1464,9 @@ func toMap(v *LeptValue, rv reflect.Value) error {
 			case reflect.Float64:
 				rivv := reflect.ValueOf(float64(liv.n))
 				rvv.SetMapIndex(rik, rivv)
+			case reflect.Interface:
+				rivv := reflect.ValueOf(float64(liv.n))
+				rvv.SetMapIndex(rik, rivv)
 			default:
 				return fmt.Errorf("toMap value typ is LeptNumber, rivk is %v", rivk)
 			}
@@ -1495,7 +1532,7 @@ func toSlice(v *LeptValue, rv reflect.Value) error {
 	// 没必要将 size 固定为输入，可能存在空的情况
 	// 如果是 slice，可以设置对应的 length
 	// fmt.Println(rv.Cap(), rv.Len(), rv.CanSet()) 0 0 true
-	if vsize >= rv.Cap() {
+	if vsize > rv.Cap() {
 		newcap := vsize
 		if newcap < 4 {
 			newcap = 4
@@ -1531,57 +1568,3 @@ func toSlice(v *LeptValue, rv reflect.Value) error {
 func setValue(rv reflect.Value) {
 	rv.SetBool(true)
 }
-
-// if liv == nil {
-// 	rv.Field(i).Set(reflect.Zero(fit.Type))
-// } else {
-// 	switch liv.typ {
-// 	case LeptNull:
-// 		if fit.Type.Kind() != reflect.Interface {
-// 			return fmt.Errorf("toStruct field %v (%v) is not nil", i, fiName)
-// 		}
-// 		fiv := reflect.Zero(reflect.TypeOf(nil))
-// 		rv.Field(i).Set(fiv)
-// 	case LeptFalse:
-// 		if fit.Type.Kind() != reflect.Bool {
-// 			return fmt.Errorf("toStruct field %v (%v) is not bool", i, fiName)
-// 		}
-// 		rv.Field(i).SetBool(false)
-// 	case LeptTrue:
-// 		if fit.Type.Kind() != reflect.Bool {
-// 			return fmt.Errorf("toStruct field %v (%v) is not bool", i, fiName)
-// 		}
-// 		rv.Field(i).SetBool(true)
-// 	case LeptNumber:
-// 		if fit.Type.Kind() != reflect.Float64 {
-// 			return fmt.Errorf("toStruct field %v (%v) is not float64", i, fiName)
-// 		}
-// 		rv.Field(i).SetFloat(liv.n)
-// 	case LeptString:
-// 		if fit.Type.Kind() != reflect.String {
-// 			return fmt.Errorf("toStruct field %v (%v) is not string", i, fiName)
-// 		}
-// 		rv.Field(i).SetString(liv.s)
-// 	case LeptArray:
-// 		if fit.Type.Kind() != reflect.Array || fit.Type.Kind() != reflect.Slice {
-// 			return fmt.Errorf("toStruct field %v (%v) is not array slice", i, fiName)
-// 		}
-// 		rv.Field(i).SetLen(fit.Type.Len())
-// 		for j := 0; j < fit.Type.Len(); j++ {
-// 			if err := toValue(v.a[j], rv.Field(i).Index(j)); err != nil {
-// 				return err
-// 			}
-// 		}
-// 	case LeptObject:
-// 		if fit.Type.Kind() != reflect.Struct {
-// 			return fmt.Errorf("toStruct field %v (%v) is not struct", i, fiName)
-// 		}
-// 		rv.Field(i).SetLen(fit.Type.NumField())
-// 		for j := 0; j < fit.Type.NumField(); j++ {
-// 			livj := LeptFindObjectValue(liv, rv.Field(i).Type().Field(j).Name)
-// 			if err := toValue(livj, rv.Field(i).Field(j)); err != nil {
-// 				return err
-// 			}
-// 		}
-// 	}
-// }
