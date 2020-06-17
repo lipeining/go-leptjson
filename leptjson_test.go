@@ -181,9 +181,8 @@ func TestParseFloat(t *testing.T) {
 		{"0x123", 1.5},
 	}
 	for _, c := range invalid {
-		if _, err := strconv.ParseFloat(c.input, 64); err == nil {
-			t.Errorf("ParseFloat should get err, but now : %v", err)
-		}
+		number, err := strconv.ParseFloat(c.input, 64)
+		fmt.Println("TestParseFloat", number, err)
 	}
 }
 
@@ -887,7 +886,7 @@ func TestToStruct(t *testing.T) {
 		if err != nil {
 			t.Errorf("ToStruct expect no err: %v", err)
 		} else {
-			fmt.Println(structure)
+			fmt.Println("TestToStruct", structure)
 			if vi := structure.N; vi != nil {
 				t.Errorf("obj.N should be nil")
 			}
@@ -935,7 +934,7 @@ func TestToStructArray(t *testing.T) {
 		if err := ToStruct(v, &structure); err != nil {
 			t.Errorf("ToStruct expect no err: %v", err)
 		} else {
-			fmt.Println(structure)
+			fmt.Println("TestToStructArray []interface{}", structure)
 			if vi := structure[0]; vi != nil {
 				t.Errorf("array[0] should be nil")
 			}
@@ -960,15 +959,15 @@ func TestToStructArray(t *testing.T) {
 					}
 				}
 			}
-			// if viT, viok := structure[6].(map[string]interface{}); !viok || len(viT) != 3 {
-			// 	t.Errorf("structure[6] should be object")
-			// } else {
-			// 	for jindex, j := range []string{"1", "2", "3"} {
-			// 		if vitj, vijok := viT[j].(float64); !vijok || vitj != float64(jindex+1) {
-			// 			t.Errorf("array[0][%v] should be %v ", j, jindex+1)
-			// 		}
-			// 	}
-			// }
+			if viT, viok := structure[6].(map[string]interface{}); !viok || len(viT) != 3 {
+				t.Errorf("structure[6] should be object")
+			} else {
+				for jindex, j := range []string{"1", "2", "3"} {
+					if vitj, vijok := viT[j].(float64); !vijok || vitj != float64(jindex+1) {
+						t.Errorf("array[0][%v] should be %v ", j, jindex+1)
+					}
+				}
+			}
 		}
 	}
 }
@@ -982,5 +981,5 @@ func TestSetValue(t *testing.T) {
 	rv := reflect.ValueOf(&v)
 	rv = rv.Elem()
 	setValue(rv.Field(0))
-	fmt.Println(rv)
+	fmt.Println("TestSetValue", rv)
 }

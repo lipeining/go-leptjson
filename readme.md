@@ -148,3 +148,40 @@ fmt.Println(rvt.CanAddr(), rvt.CanSet(), reflect.TypeOf("abc"), reflect.MapOf(re
 toMap(v, rvt)
 rv.Set(rvt)
 ```
+```shell
+panic: assignment to entry in nil map [recovered]
+        panic: assignment to entry in nil map
+```
+无论是 toStruct, 还是 toMap, 还是 toSlice 都需要保证不对 nil 值进行操作，即
+都需要使用 make 初始化
+```go
+if rv.IsNil() {
+    rv.Set(reflect.MakeMap(rv.Type()))
+}
+```
+
+
+## ptr
+反射中没有处理 reflect.Ptr reflect.Interface reflect.Chan reflect.Func 的情况，是否需要考虑
+```go
+if v.IsNil() {
+  v.Set(reflect.New(v.Type().Elem()))
+}
+if v.IsNil() {
+  v.Set(reflect.MakeMap(t))
+}
+elemType := v.Type().Elem()
+if !mapElem.IsValid() {
+   mapElem = reflect.New(elemType).Elem()
+} else {
+  mapElem.Set(reflect.Zero(elemType))
+}
+subv = mapElem
+if subv.Kind() == reflect.Ptr {
+  if subv.IsNil() {
+    subv.Set(reflect.New(subv.Type().Elem()))
+  }
+  subv = subv.Elem()
+}
+subv = subv.Field(i)
+```
