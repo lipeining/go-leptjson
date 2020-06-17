@@ -1302,15 +1302,15 @@ func toValue(v *LeptValue, rv reflect.Value) error {
 				rv.Set(rvt)
 			case LeptObject:
 				// rvt := reflect.MakeMapWithSize(reflect.MapOf(reflect.TypeOf("abc"), rv.Type()), len(v.o))
-				// rvt := reflect.MakeMap(reflect.MapOf(reflect.TypeOf("abc"), rv.Type()))
-				// mapStringInt := make(map[string]interface{})
-				// mapType := reflect.TypeOf(mapStringInt)
+				rvt := reflect.MakeMap(reflect.MapOf(reflect.TypeOf("abc"), rv.Type()))
+				// // mapStringInt := make(map[string]interface{})
+				// // mapType := reflect.TypeOf(mapStringInt)
 				// rvt := reflect.MakeMap(mapType)
 				// rvt.SetMapIndex(reflect.ValueOf("abc"), reflect.ValueOf(1))
 				// fmt.Println(rvt.CanAddr(), rvt.CanSet(), reflect.TypeOf("abc"), reflect.MapOf(reflect.TypeOf("abc"), rv.Type()), rvt.CanInterface(), rvt)
-				// toMap(v, rvt)
-				// rv.Set(rvt)
-				rv.Set(reflect.Zero(rv.Type()))
+				toMap(v, rvt)
+				rv.Set(rvt)
+				// rv.Set(reflect.Zero(rv.Type()))
 			default:
 				rv.Set(reflect.Zero(rv.Type()))
 			}
@@ -1402,7 +1402,10 @@ func toMap(v *LeptValue, rv reflect.Value) error {
 	// 	}
 	// }
 	vsize := LeptGetObjectSize(v)
-	rvv := reflect.MakeMapWithSize(rv.Type(), vsize)
+	// fix panic: assignment to entry in nil map [recovered]
+	if rv.IsNil() {
+		rv.Set(reflect.MakeMap(rv.Type()))
+	}
 	for i := 0; i < vsize; i++ {
 		lik := LeptGetObjectKey(v, i)
 		liv := LeptGetObjectValue(v, i)
@@ -1415,58 +1418,58 @@ func toMap(v *LeptValue, rv reflect.Value) error {
 			if rivk != reflect.Interface {
 				return fmt.Errorf("toMap value typ is LeptNull, rivk is %v", rivk)
 			}
-			rvv.SetMapIndex(rik, reflect.Zero(riv))
+			rv.SetMapIndex(rik, reflect.Zero(riv))
 		case LeptFalse:
 			if rivk != reflect.Bool {
 				return fmt.Errorf("toMap value typ is LeptFalse, rivk is %v", rivk)
 			}
-			rvv.SetMapIndex(rik, reflect.ValueOf(false))
+			rv.SetMapIndex(rik, reflect.ValueOf(false))
 		case LeptTrue:
 			if rivk != reflect.Bool {
 				return fmt.Errorf("toMap value typ is LeptTrue, rivk is %v", rivk)
 			}
-			rvv.SetMapIndex(rik, reflect.ValueOf(true))
+			rv.SetMapIndex(rik, reflect.ValueOf(true))
 		case LeptNumber:
 			switch rivk {
 			case reflect.Int:
 				rivv := reflect.ValueOf(int(liv.n))
-				rvv.SetMapIndex(rik, rivv)
+				rv.SetMapIndex(rik, rivv)
 			case reflect.Int8:
 				rivv := reflect.ValueOf(int8(liv.n))
-				rvv.SetMapIndex(rik, rivv)
+				rv.SetMapIndex(rik, rivv)
 			case reflect.Int16:
 				rivv := reflect.ValueOf(int16(liv.n))
-				rvv.SetMapIndex(rik, rivv)
+				rv.SetMapIndex(rik, rivv)
 			case reflect.Int32:
 				rivv := reflect.ValueOf(int32(liv.n))
-				rvv.SetMapIndex(rik, rivv)
+				rv.SetMapIndex(rik, rivv)
 			case reflect.Int64:
 				rivv := reflect.ValueOf(int64(liv.n))
-				rvv.SetMapIndex(rik, rivv)
+				rv.SetMapIndex(rik, rivv)
 			case reflect.Uint:
 				rivv := reflect.ValueOf(uint(liv.n))
-				rvv.SetMapIndex(rik, rivv)
+				rv.SetMapIndex(rik, rivv)
 			case reflect.Uint8:
 				rivv := reflect.ValueOf(uint8(liv.n))
-				rvv.SetMapIndex(rik, rivv)
+				rv.SetMapIndex(rik, rivv)
 			case reflect.Uint16:
 				rivv := reflect.ValueOf(uint16(liv.n))
-				rvv.SetMapIndex(rik, rivv)
+				rv.SetMapIndex(rik, rivv)
 			case reflect.Uint32:
 				rivv := reflect.ValueOf(uint32(liv.n))
-				rvv.SetMapIndex(rik, rivv)
+				rv.SetMapIndex(rik, rivv)
 			case reflect.Uint64:
 				rivv := reflect.ValueOf(uint64(liv.n))
-				rvv.SetMapIndex(rik, rivv)
+				rv.SetMapIndex(rik, rivv)
 			case reflect.Float32:
 				rivv := reflect.ValueOf(float32(liv.n))
-				rvv.SetMapIndex(rik, rivv)
+				rv.SetMapIndex(rik, rivv)
 			case reflect.Float64:
 				rivv := reflect.ValueOf(float64(liv.n))
-				rvv.SetMapIndex(rik, rivv)
+				rv.SetMapIndex(rik, rivv)
 			case reflect.Interface:
 				rivv := reflect.ValueOf(float64(liv.n))
-				rvv.SetMapIndex(rik, rivv)
+				rv.SetMapIndex(rik, rivv)
 			default:
 				return fmt.Errorf("toMap value typ is LeptNumber, rivk is %v", rivk)
 			}
@@ -1486,7 +1489,7 @@ func toMap(v *LeptValue, rv reflect.Value) error {
 			if rivk != reflect.String {
 				return fmt.Errorf("toMap value typ is LeptString, rivk is %v", rivk)
 			}
-			rvv.SetMapIndex(rik, reflect.ValueOf(liv.s))
+			rv.SetMapIndex(rik, reflect.ValueOf(liv.s))
 		case LeptArray:
 			if rivk != reflect.Array && rivk != reflect.Slice {
 				return fmt.Errorf("toMap value typ is LeptArray, rivk is %v", rivk)
@@ -1495,26 +1498,25 @@ func toMap(v *LeptValue, rv reflect.Value) error {
 			if err := toSlice(liv, rivv); err != nil {
 				return err
 			}
-			rvv.SetMapIndex(rik, rivv)
+			rv.SetMapIndex(rik, rivv)
 		case LeptObject:
 			if rivk == reflect.Struct {
 				rivv := reflect.New(riv)
 				if err := toStruct(liv, rivv); err != nil {
 					return err
 				}
-				rvv.SetMapIndex(rik, rivv)
+				rv.SetMapIndex(rik, rivv)
 			} else if rivk == reflect.Map {
 				rivv := reflect.New(riv)
 				if err := toMap(liv, rivv); err != nil {
 					return err
 				}
-				rvv.SetMapIndex(rik, rivv)
+				rv.SetMapIndex(rik, rivv)
 			} else {
 				return fmt.Errorf("toMap value typ is LeptObject, rivk is %v", rivk)
 			}
 		}
 	}
-	rv.Set(rvv)
 	return nil
 }
 
