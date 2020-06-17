@@ -228,6 +228,8 @@ func strtod(input string) (float64, string, error) {
 	// int = "0" / digit1-9 *digit
 	// frac = "." 1*digit
 	// exp = ("e" / "E") ["-" / "+"] 1*digit
+
+	// todo fix 浮点数溢出问题
 	first := input[0]
 	neg := false
 	if first == '-' {
@@ -290,6 +292,7 @@ func strtod(input string) (float64, string, error) {
 		for j := n - 1; j > len(input); j-- {
 			frac *= 10
 		}
+		// todo fix 浮点数溢出问题
 		ret += float64(decimal) / float64(frac)
 		if len(input) == 0 {
 			if neg {
@@ -302,7 +305,7 @@ func strtod(input string) (float64, string, error) {
 			return ret, input, nil
 		}
 		input, exp, err = parseExp(input)
-		if err != nil || len(input) != 0 {
+		if err != nil {
 			// illegal next char
 			return ret, input, IllegalInput
 		}
@@ -317,10 +320,7 @@ func strtod(input string) (float64, string, error) {
 		if err != nil {
 			return ret, input, err
 		}
-		if len(input) != 0 {
-			// do not parse any more leave it to next parser
-			return ret, input, nil
-		}
+		// do not parse any more leave it to next parser
 		ret *= float64(math.Pow10(exp))
 		if neg {
 			return -ret, input, nil
