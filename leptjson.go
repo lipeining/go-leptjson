@@ -213,7 +213,8 @@ func LeptParseLiteral(c *LeptContext, v *LeptValue, literal string, typ LeptType
 func LeptParseNumber(c *LeptContext, v *LeptValue) LeptEvent {
 	var end string
 	var err error
-	v.n, end, err = strtod(c.json)
+	// v.n, end, err = strtod(c.json)
+	v.n, end, err = strToFloat64(c.json)
 	if err != nil {
 		return LeptParseInvalidValue
 	}
@@ -329,6 +330,112 @@ func strtod(input string) (float64, string, error) {
 	} else {
 		// illegal next like 123abc 123 , 123, 123] 123} 123space 等情况
 		return ret, input, nil
+	}
+}
+
+func strToFloat64(input string) (float64, string, error) {
+	// number = [ "-" ] int [ frac ] [ exp ]
+	// int = "0" / digit1-9 *digit
+	// frac = "." 1*digit
+	// exp = ("e" / "E") ["-" / "+"] 1*digit
+
+	// fix 浮点数溢出问题
+	origin := input
+	end := 0
+	if input[0] == '-' {
+		input = input[1:]
+		end++
+	}
+	var IllegalInput = errors.New("illegal input number string")
+	if len(input) == 0 {
+		// no more charater
+		return 0, "", IllegalInput
+	}
+	// take care of 0.0 0.12120
+	if input[0] == '0' && len(input) == 1 {
+		// start with zero illegal like 0123
+		return 0, "", nil
+	}
+	if input[0] == '0' && len(input) > 1 {
+		if input[1] == '.' {
+			// pass have to check fix frac
+		} else if input[1] == 'e' || input[1] == 'E' {
+			// pass have to check fix exp
+		} else if input[1] == 'x' || isDigit(input[1]) {
+			// fix of 0x0 ox123 0123 0abc
+			return 0, input, IllegalInput
+		}
+	}
+	// fix abc123 c1, x321
+	if !isDigit(input[0]) {
+		// 非法开头字符
+		return 0, input, IllegalInput
+	}
+	i := 0
+	for i < len(input) && isDigit(input[i]) {
+		i++
+	}
+	input = input[i:]
+	end += i
+	if len(input) > 0 && input[0] == '.' {
+		// should be frac
+		if len(input) == 1 {
+			return 0, input, IllegalInput
+		}
+		i = 1
+		for i < len(input) && isDigit(input[i]) {
+			i++
+		}
+		end += i
+		input = input[i:]
+		if len(input) > 0 && (input[0] == 'e' || input[0] == 'E') {
+			if len(input) == 1 {
+				return 0, input, IllegalInput
+			}
+			end++
+			input = input[1:]
+			if input[0] == '-' || input[0] == '+' {
+				input = input[1:]
+				end++
+			}
+			if len(input) == 0 {
+				return 0, input, IllegalInput
+			}
+			i = 0
+			for i < len(input) && isDigit(input[i]) {
+				i++
+			}
+			end += i
+			input = input[i:]
+			ret, err := strconv.ParseFloat(origin[:end], 64)
+			return ret, input, err
+		}
+		ret, err := strconv.ParseFloat(origin[:end], 64)
+		return ret, input, err
+	} else if len(input) > 0 && (input[0] == 'e' || input[0] == 'E') {
+		if len(input) == 1 {
+			return 0, input, IllegalInput
+		}
+		end++
+		input = input[1:]
+		if input[0] == '-' || input[0] == '+' {
+			input = input[1:]
+			end++
+		}
+		if len(input) == 0 {
+			return 0, input, IllegalInput
+		}
+		i = 0
+		for i < len(input) && isDigit(input[i]) {
+			i++
+		}
+		end += i
+		input = input[i:]
+		ret, err := strconv.ParseFloat(origin[:end], 64)
+		return ret, input, err
+	} else {
+		ret, err := strconv.ParseFloat(origin[:end], 64)
+		return ret, input, err
 	}
 }
 
@@ -912,7 +1019,8 @@ func leptStringifyValue(v *LeptValue) string {
 	case LeptTrue:
 		return "true"
 	case LeptNumber:
-		return strconv.FormatFloat(v.n, 'g', -1, 64)
+		// return strconv.FormatFloat(v.n, 'g', -1, 64)
+		return strconv.FormatFloat(v.n, 'g', 17, 64)
 	case LeptString:
 		return leptStringifyString(v.s)
 	case LeptArray:

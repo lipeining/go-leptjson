@@ -19,7 +19,7 @@ func expectEQInt(t *testing.T, expect, actual int) {
 }
 func expectEQLeptEvent(t *testing.T, expect, actual LeptEvent) {
 	if expect != actual {
-		t.Errorf("parse int, expect: %v, actual: %v", expect, actual)
+		t.Errorf("parse LeptEvent, expect: %v, actual: %v", expect, actual)
 	}
 }
 func expectEQFloat64(t *testing.T, expect, actual float64) {
@@ -87,8 +87,8 @@ func TestLeptParseNumber(t *testing.T) {
 		expect float64
 	}{
 		{"1.0000000000000002", 1.0000000000000002},
-		// {"4.9406564584124654e-324", 4.9406564584124654e-324},  // fail
-		// {"-4.9406564584124654e-324", -4.9406564584124654e-324}, // fail
+		{"4.9406564584124654e-324", 4.9406564584124654e-324},   // fail
+		{"-4.9406564584124654e-324", -4.9406564584124654e-324}, // fail
 		{"2.2250738585072009e-308", 2.2250738585072009e-308},
 		{"-2.2250738585072009e-308", -2.2250738585072009e-308},
 		{"2.2250738585072014e-308", 2.2250738585072014e-308},
@@ -161,7 +161,34 @@ func TestParseFloat(t *testing.T) {
 	// 使用 strconv 无法解析全部的数据，因为格式不对
 	for _, c := range valid {
 		if ret, err := strconv.ParseFloat(c.input, 64); err != nil || float64(ret) != c.expect {
+			t.Errorf("ParseFloat err: %v, ret: %v, expect: %v", err, ret, c.expect)
+		}
+		if ret, _, err := strToFloat64(c.input); err != nil || ret != c.expect {
+			t.Errorf("strToFloat64 err:  %v, ret: %v, expect: %v", err, ret, c.expect)
+		}
+	}
+	edges := []struct {
+		input  string
+		expect float64
+	}{
+		{"1.0000000000000002", 1.0000000000000002},
+		{"4.9406564584124654e-324", 4.9406564584124654e-324},   // fail
+		{"-4.9406564584124654e-324", -4.9406564584124654e-324}, // fail
+		{"2.2250738585072009e-308", 2.2250738585072009e-308},
+		{"-2.2250738585072009e-308", -2.2250738585072009e-308},
+		{"2.2250738585072014e-308", 2.2250738585072014e-308},
+		{"-2.2250738585072014e-308", -2.2250738585072014e-308},
+		{"1.7976931348623157e+308", 1.7976931348623157e+308},
+		{"-1.7976931348623157e+308", -1.7976931348623157e+308},
+	}
+	for _, c := range edges {
+		if ret, err := strconv.ParseFloat(c.input, 64); err != nil || float64(ret) != c.expect {
 			t.Errorf("ParseFloat err: %v", err)
+		} else {
+			// fmt.Println(c.input, c.expect, ret, c.expect == ret)
+		}
+		if ret, _, err := strToFloat64(c.input); err != nil || ret != c.expect {
+			t.Errorf("strToFloat64 err:  %v, ret: %v, expect: %v", err, ret, c.expect)
 		}
 	}
 	invalid := []struct {
@@ -181,8 +208,16 @@ func TestParseFloat(t *testing.T) {
 		{"0x123", 1.5},
 	}
 	for _, c := range invalid {
-		number, err := strconv.ParseFloat(c.input, 64)
-		fmt.Println("TestParseFloat", number, err)
+		// number, err := strconv.ParseFloat(c.input, 64)
+		// fmt.Println("TestParseFloat", number, err)
+		if ret, err := strconv.ParseFloat(c.input, 64); err == nil && float64(ret) == c.expect {
+			t.Errorf("ParseFloat should have err: %v, ret: %v, expect: %v", err, ret, c.expect)
+		} else {
+			// fmt.Println(c.input, c.expect, ret, c.expect == ret)
+		}
+		if ret, _, err := strToFloat64(c.input); err == nil && ret == c.expect {
+			t.Errorf("strToFloat64 should have err:  %v, ret: %v, expect: %v", err, ret, c.expect)
+		}
 	}
 }
 
@@ -615,8 +650,8 @@ func TestLeptStringify(t *testing.T) {
 		{"1.234e-20"},
 
 		{"1.0000000000000002"},
-		// {"4.9406564584124654e-324"},
-		// {"-4.9406564584124654e-324"},
+		{"4.9406564584124654e-324"},
+		{"-4.9406564584124654e-324"},
 		{"2.2250738585072009e-308"},
 		{"-2.2250738585072009e-308"},
 		{"2.2250738585072014e-308"},
