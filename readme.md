@@ -4,10 +4,143 @@ just a json parser learning resp!
 
 main idea and lesson comes from (miloyip/json-tutorial)[https://github.com/miloyip/json-tutorial]
 
+### usage
+总体上可以参考 leptjson_test.go
+使用以下函数
+```go
+func LeptParse(v *LeptValue, json string) LeptEvent
+func ToArray(v *LeptValue) []interface{}
+func ToInterface(v *LeptValue) interface{}
+func ToMap(v *LeptValue) map[string]interface{}
+func ToStruct(v *LeptValue, structure interface{}) error
+```
+```go
+	input := " { " +
+		"\"N\" : null , " +
+		"\"F\" : false , " +
+		"\"T\" : true , " +
+		"\"I\" : 123 , " +
+		"\"S\" : \"abc\", " +
+		"\"A\" : [ 1, 2, 3 ]," +
+		"\"O\" : { \"1\" : 1, \"2\" : 2, \"3\" : 3 }" +
+		" } "
+	v := NewLeptValue()
+	expectEQLeptEvent(t, LeptParseOK, LeptParse(v, input))
+	type obj struct {
+		N interface{}    `json:"n"`
+		F bool           `json:"f"`
+		T bool           `json:"t"`
+		I int            `json:"i"`
+		S string         `json:"s"`
+		A []int          `json:"a"`
+		O map[string]int `json:"o"`
+	}
+  structure := obj{}
+  err := ToStruct(v, &structure)
+```
+
+```go
+	input := "[null, true, false, 123, \"abc\", [ 1, 2, 3 ], { \"1\" : 1, \"2\" : 2, \"3\" : 3 }]"
+	v := NewLeptValue()
+	expectEQLeptEvent(t, LeptParseOK, LeptParse(v, input))
+  var structure []interface{}
+  err := ToStruct(v, &structure)
+```
+
+```go
+input := " { " +
+		"\"n\" : null , " +
+		"\"f\" : false , " +
+		"\"t\" : true , " +
+		"\"i\" : 123 , " +
+		"\"s\" : \"abc\", " +
+		"\"a\" : [ 1, 2, 3 ]," +
+		"\"o\" : { \"1\" : 1, \"2\" : 2, \"3\" : 3 }" +
+		" } "
+	v := NewLeptValue()
+	expectEQLeptEvent(t, LeptParseOK, LeptParse(v, input))
+	i := ToInterface(v)
+```
+```go
+	input := "[null, true, false, 123, \"abc\", [ 1, 2, 3 ], { \"1\" : 1, \"2\" : 2, \"3\" : 3 }]"
+	v := NewLeptValue()
+	expectEQLeptEvent(t, LeptParseOK, LeptParse(v, input))
+	i := ToInterface(v)
+```
+
+### benchmark
+加入 RapidJson 的 benchmark 对比，应该效率不高。
+
+
+### go doc
+生成 go doc 文档
+- go doc goleptjson
+- go doc -u -all goleptjson
+示例：
+```go go doc goleptjson
+
+package goleptjson // import "github.com/lipeining/goleptjson"
+
+const LeptKeyNotExist int = -1
+var ErrReachEnd = errors.New("json string reach end") ...
+func LeptCopy(dst, src *LeptValue) bool
+func LeptFindObjectIndex(v *LeptValue, key string) int
+func LeptFree(v *LeptValue)
+func LeptGetArraySize(v *LeptValue) int
+func LeptGetBoolean(v *LeptValue) int
+func LeptGetNumber(v *LeptValue) float64
+func LeptGetObjectKey(v *LeptValue, index int) string
+func LeptGetObjectKeyLength(v *LeptValue, index int) int
+func LeptGetObjectSize(v *LeptValue) int
+func LeptGetString(v *LeptValue) string
+func LeptGetStringLength(v *LeptValue) int
+func LeptInit(v *LeptValue)
+func LeptIsEqual(lhs, rhs *LeptValue) bool
+func LeptMove(dst, src *LeptValue) bool
+func LeptParseWhitespace(c *LeptContext)
+func LeptRemoveObjectValue(v *LeptValue, index int)
+func LeptSetBoolean(v *LeptValue, n int)
+func LeptSetNull(v *LeptValue)
+func LeptSetNumber(v *LeptValue, n float64)
+func LeptSetObject(v *LeptValue)
+func LeptSetString(v *LeptValue, s string)
+func LeptStringify(v *LeptValue) string
+func LeptSwap(lhs, rhs *LeptValue) bool
+func ToArray(v *LeptValue) []interface{}
+func ToInterface(v *LeptValue) interface{}
+func ToMap(v *LeptValue) map[string]interface{}
+func ToStruct(v *LeptValue, structure interface{}) error
+type LeptContext struct{ ... }
+    func NewLeptContext(json string) *LeptContext
+type LeptEvent int
+    const LeptParseOK LeptEvent = iota ...
+    func LeptParse(v *LeptValue, json string) LeptEvent
+    func LeptParseArray(c *LeptContext, v *LeptValue) LeptEvent
+    func LeptParseFalse(c *LeptContext, v *LeptValue) LeptEvent
+    func LeptParseLiteral(c *LeptContext, v *LeptValue, literal string, typ LeptType) LeptEvent
+    func LeptParseNull(c *LeptContext, v *LeptValue) LeptEvent
+    func LeptParseNumber(c *LeptContext, v *LeptValue) LeptEvent
+    func LeptParseObject(c *LeptContext, v *LeptValue) LeptEvent
+    func LeptParseString(c *LeptContext, v *LeptValue) LeptEvent
+    func LeptParseStringRaw(c *LeptContext) (string, LeptEvent)
+    func LeptParseTrue(c *LeptContext, v *LeptValue) LeptEvent
+    func LeptParseValue(c *LeptContext, v *LeptValue) LeptEvent
+type LeptMember struct{ ... }
+type LeptType int
+    const LeptNull LeptType = iota ...
+    func LeptGetType(v *LeptValue) LeptType
+type LeptValue struct{ ... }
+    func LeptFindObjectValue(v *LeptValue, key string) *LeptValue
+    func LeptGetArrayElement(v *LeptValue, index int) *LeptValue
+    func LeptGetObjectValue(v *LeptValue, index int) *LeptValue
+    func LeptSetObjectValue(v *LeptValue, key string) *LeptValue
+    func NewLeptValue() *LeptValue
+```
+
 ### Parse Error
-leptjson 使用 int 作为解析错误的返回值，这里是否需要修改
-1.自定义 error 类型，使用 go 的 err != nil 方式
-2.使用 int 的一个类型，结构保持一致， ErrorType == 0 || 1 || 2 || 3
+leptjson 使用 int 作为解析错误的返回值，
+goleptjson 不适用 error 作为错误返回，
+定义了相对于 leptjson 的 LeptEvent 表示func LeptParse(string) LeptEvent 的返回值。
 
 ### number
 ```md
@@ -147,7 +280,6 @@ array = %x5B ws [ value *( ws %x2C ws value ) ] ws %x5D
 当中，%x5B 是左中括号 [，%x2C 是逗号 ,，%x5D 是右中括号 ] ，ws 是空白字符。一个数组可以包含零至多个值，以逗号分隔，例如 []、[1,2,true]、[[1,2],[3,4],"abc"] 都是合法的数组。但注意 JSON 不接受末端额外的逗号，例如 [1,2,] 是不合法的（许多编程语言如 C/C++、Javascript、Java、C# 都容许数组初始值包含末端逗号）。
 ````
 
-
 ### object
 ```md
 JSON 对象和 JSON 数组非常相似，区别包括 JSON 对象以花括号 {}（U+007B、U+007D）包裹表示，另外 JSON 对象由对象成员（member）组成，而 JSON 数组由 JSON 值组成。所谓对象成员，就是键值对，键必须为 JSON 字符串，然后值是任何 JSON 值，中间以冒号 :（U+003A）分隔。完整语法如下：
@@ -158,6 +290,7 @@ object = %x7B ws [ member *( ws %x2C ws member ) ] ws %x7D
 ### array object
 两者大体解析过程是相似的，不过存放的地址不同，object 多了解析 key 值得步骤。
 这里都是使用 slice 存储具体值，可以针对 object 优化实现哈希链表的结构，更加高效。
+递归处理 [] {}, 字符串，末尾不允许多余的 ',' 针对 object 需要使用 LeptMember 存储 key and value
 
 ### interface{}
 golang 提供的对象是 interface{} 可以存储 nil,bool,number,string,slice,map 
@@ -170,6 +303,11 @@ func ToMap(v *LeptValue) map[string]interface{} {
 func ToArray(v *LeptValue) []interface{} {
 }
 ```
+如果解析得到的 LeptValue 没有错误，那么可以通过上述三个方法得到
+interface{} 的层次结构体。需要用户自行使用 .(string) .([]string) .(map[string]string) 等
+进行解析。
+
+### struct
 在对应的基础上，可以使用 []struct{} struct{} 实现 encoding/json 中的
 方法，将 json 字符串映射到 struct 中。
 ```go
@@ -183,10 +321,10 @@ func ToStruct(v *LeptValue, structure interface{}) error {
 ```go
 {<nil> false true 123 abc [] map[]}
 ```
-未知原因导致 数组和 map 解析不正确
 数组需要初始化为一个合适的 cap 的 slice
 map 需要知道 key value 的 Type
-方法：
+否则可能导致 panic 错误。
+关于解析 struct 中的 map[a]b 的方法，首先，获取对应的 key, value Type()：
 reflect.TypeOf(m).Key()
 reflect.TypeOf(m).Elem()
 ```GO
@@ -197,6 +335,11 @@ rvt := reflect.MakeMapWithSize(reflect.MapOf(reflect.TypeOf("abc"), rv.Type()), 
 fmt.Println(rvt.CanAddr(), rvt.CanSet(), reflect.TypeOf("abc"), reflect.MapOf(reflect.TypeOf("abc"), rv.Type()), rvt.CanInterface(), rvt)
 toMap(v, rvt)
 rv.Set(rvt)
+
+解决方法：使用 reflect.Value 生成关于 &ptr 的值，或者，生成一个 reflect.Value 通过
+reflect.MakeSlice,
+reflect.MakeMap
+并且初始化对应的 cap, len, nil 问题。避免对 nil assign object
 ```
 ```shell
 panic: assignment to entry in nil map [recovered]
@@ -210,9 +353,14 @@ if rv.IsNil() {
 }
 ```
 
+### struct tag
+todo 实现 struct.tag 的方法，包括 omitempty,omit name 等操作。
 
-## ptr
-反射中没有处理 reflect.Ptr reflect.Interface reflect.Chan reflect.Func 的情况，是否需要考虑
+### ptr
+todo 实现 struct.field. ptr 的结构体解析
+当前的反射中没有处理 reflect.Ptr reflect.Interface reflect.Chan reflect.Func 的情况，是否需要考虑
+主要是 reflect.Ptr 的问题。
+下面列举 reflect 包的处理方式，需要取得 x.Elem() 得到 Type() 进行 Setxxx()
 ```go
 if v.IsNil() {
   v.Set(reflect.New(v.Type().Elem()))

@@ -1018,3 +1018,11 @@ func TestSetValue(t *testing.T) {
 	setValue(rv.Field(0))
 	fmt.Println("TestSetValue", rv)
 }
+
+// example todo
+
+func ExampleLeptParse() {}
+func ExampToInterface() {}
+func ExampToMap()       {}
+func ExampToArray()     {}
+func ExampToStruct()    {}
