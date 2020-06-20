@@ -68,9 +68,22 @@ input := " { " +
 	i := ToInterface(v)
 ```
 
+
+### test
+```sh
+go test -coverprofile="c.out"
+go tool cover -html="c.out"
+```
+可以补充关于错误输入的测试，
+struct, map, array, slice 结构体的测试。
+todo 添加 nativejson-benchmark 对应的 json-checker[http://json.org/JSON_checker/]
+和其他测试数据。
+
 ### benchmark
 加入 RapidJson 的 benchmark 对比，应该效率不高。
-
+```sh
+C:\Go\bin\go.exe test -benchmem -benchtime=5s -bench="." -run=^$ github.com/lipeining/goleptjson 
+```
 
 ### go doc
 生成 go doc 文档

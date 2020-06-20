@@ -796,9 +796,10 @@ func LeptParseObject(c *LeptContext, v *LeptValue) LeptEvent {
 		if ok != LeptParseOK {
 			return ok
 		}
-		if len(ki) == 0 {
-			return LeptParseMissKey
-		}
+		// "":  23456789012E66, // fix 允许 key 为空字符串
+		// if len(ki) == 0 {
+		// 	return LeptParseMissKey
+		// }
 		LeptParseWhitespace(c)
 		if c.json[0] != ':' {
 			return LeptParseMissColon
