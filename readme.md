@@ -84,6 +84,35 @@ todo 添加 nativejson-benchmark 对应的 json-checker[http://json.org/JSON_che
 ```sh
 C:\Go\bin\go.exe test -benchmem -benchtime=5s -bench="." -run=^$ github.com/lipeining/goleptjson 
 ```
+使用的是 /data/canada.json  /data/citm_catalog.json /data/twitter.json
+```sh
+Running tool: C:\Go\bin\go.exe test -benchmem -run=^$ github.com/lipeining/goleptjson -bench ^(BenchmarkCanadaJSON)$
+
+goos: windows
+goarch: amd64
+pkg: github.com/lipeining/goleptjson
+BenchmarkCanadaJSON-4   	      20	  50570840 ns/op	18168193 B/op	  392554 allocs/op
+PASS
+ok  	github.com/lipeining/goleptjson	1.280s
+
+Running tool: C:\Go\bin\go.exe test -benchmem -run=^$ github.com/lipeining/goleptjson -bench ^(BenchmarkCitmCatalogJSON)$
+
+goos: windows
+goarch: amd64
+pkg: github.com/lipeining/goleptjson
+BenchmarkCitmCatalogJSON-4   	      69	  15252075 ns/op	 6658758 B/op	  161793 allocs/op
+PASS
+ok  	github.com/lipeining/goleptjson	1.277s
+
+Running tool: C:\Go\bin\go.exe test -benchmem -run=^$ github.com/lipeining/goleptjson -bench ^(BenchmarkTwitterJSON)$
+
+goos: windows
+goarch: amd64
+pkg: github.com/lipeining/goleptjson
+BenchmarkTwitterJSON-4   	     135	   8158259 ns/op	 3780694 B/op	   71226 allocs/op
+PASS
+ok  	github.com/lipeining/goleptjson	2.197s
+```
 
 ### go doc
 生成 go doc 文档

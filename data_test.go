@@ -87,26 +87,65 @@ func TestRoundtripJSON(t *testing.T) {
 }
 
 func BenchmarkCanadaJSON(b *testing.B) {
+	path := filepath.Join("./data", "canada.json")
+	buf, err := readJSON(path)
+	if err != nil {
+		b.Errorf("readJSON %v get err: %v", path, err)
+		return
+	}
+	if buf == "" {
+		b.Errorf("readJSON %v get empty string : %v", path, err)
+		return
+	}
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		path := filepath.Join(roundtrip, "canada.json")
-		buf, err := readJSON(path)
-		if err != nil {
-			b.Errorf("readJSON %v get err: %v", path, err)
-		}
-		if buf == "" {
-			return
-		}
 		v := NewLeptValue()
 		event := LeptParse(v, buf)
 		if event != LeptParseOK {
 			b.Errorf("benchmark parse err : %v", event)
 		}
-		fmt.Println(event)
+		// fmt.Println(event)
 	}
 }
-func BenchmarkCitmCatalogJSON(t *testing.B) {
-
+func BenchmarkCitmCatalogJSON(b *testing.B) {
+	path := filepath.Join("./data", "citm_catalog.json")
+	buf, err := readJSON(path)
+	if err != nil {
+		b.Errorf("readJSON %v get err: %v", path, err)
+		return
+	}
+	if buf == "" {
+		b.Errorf("readJSON %v get empty string : %v", path, err)
+		return
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		v := NewLeptValue()
+		event := LeptParse(v, buf)
+		if event != LeptParseOK {
+			b.Errorf("benchmark parse err : %v", event)
+		}
+		// fmt.Println(event)
+	}
 }
-func BenchmarkTwitterJSON(t *testing.B) {
-
+func BenchmarkTwitterJSON(b *testing.B) {
+	path := filepath.Join("./data", "twitter.json")
+	buf, err := readJSON(path)
+	if err != nil {
+		b.Errorf("readJSON %v get err: %v", path, err)
+		return
+	}
+	if buf == "" {
+		b.Errorf("readJSON %v get empty string : %v", path, err)
+		return
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		v := NewLeptValue()
+		event := LeptParse(v, buf)
+		if event != LeptParseOK {
+			b.Errorf("benchmark parse err : %v", event)
+		}
+		// fmt.Println(event)
+	}
 }
