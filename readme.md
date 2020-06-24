@@ -395,6 +395,24 @@ if rv.IsNil() {
 }
 ```
 
+反射为 struct 时，只能使用 string 作为 map[string]Type
+```go
+  // Check type of target: struct or map[string]T
+  switch v.Kind() {
+  case reflect.Map:
+  	// map must have string kind
+  	t := v.Type()
+  	if t.Key().Kind() != reflect.String {
+  		d.saveError(&UnmarshalTypeError{"object", v.Type(), int64(d.off)})
+  		d.off--
+  		d.next() // skip over { } in input
+  		return
+  	}
+  	if v.IsNil() {
+  		v.Set(reflect.MakeMap(t))
+  	}
+```
+
 ### struct tag
 todo 实现 struct.tag 的方法，包括 omitempty,omit name 等操作。
 

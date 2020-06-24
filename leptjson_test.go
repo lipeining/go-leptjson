@@ -195,8 +195,8 @@ func TestParseFloat(t *testing.T) {
 		input  string
 		expect float64
 	}{
-		{"+0", 0.0},
-		{"+1", 1.0},
+		// {"+0", 0.0},
+		// {"+1", 1.0},
 		{".123", 1.5},
 		{"1.", 1.5},
 		{"INF", 1.5},
@@ -639,7 +639,7 @@ func TestLeptStringify(t *testing.T) {
 		input string
 	}{
 		{"0"},
-		{"-0"},
+		// {"-0"},
 		{"1"},
 		{"-1"},
 		{"1.5"},
@@ -885,6 +885,9 @@ func TestToArray(t *testing.T) {
 }
 func TestToStruct(t *testing.T) {
 	input := " { " +
+		"\"n\" : null , " +
+		"\"f\" : false , " +
+		"\"ff\" : false , " +
 		"\"N\" : null , " +
 		"\"F\" : false , " +
 		"\"T\" : true , " +
@@ -906,14 +909,37 @@ func TestToStruct(t *testing.T) {
 	expectEQLeptEvent(t, LeptParseOK, LeptParse(v, input))
 	// fmt.Println(ToInterface(v))
 	// fmt.Println(ToMap(v))
+	type SubStruct struct {
+		t *bool
+		T *bool
+		a *[]int
+		o *map[string]int
+		A []int          `json:"A"`
+		O map[string]int `json:"O"`
+	}
 	type obj struct {
-		N interface{}    `json:"n"`
-		F bool           `json:"f"`
-		T bool           `json:"t"`
-		I int            `json:"i"`
-		S string         `json:"s"`
-		A []int          `json:"a"`
-		O map[string]int `json:"o"`
+		n  *interface{} `json:"n"`
+		f  *bool        `json:"f"`
+		ff **bool       `json:"f"`
+		// t *bool           `json:"t"`
+		// i *int            `json:"i"`
+		// s *string         `json:"s"`
+		// a *[]int          `json:"a"`
+		// o *map[string]int `json:"o"`
+
+		subs []*SubStruct
+		Subs []SubStruct
+		sub  *SubStruct
+		Sub  SubStruct
+
+		N interface{}    `json:"N"`
+		F bool           `json:"F"`
+		T bool           `json:"T"`
+		I int            `json:"I"`
+		S string         `json:"S"`
+		A []int          `json:"A"`
+		O map[string]int `json:"O"`
+		// O map[int]int `json:"O"`
 	}
 	{
 		structure := obj{}
