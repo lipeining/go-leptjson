@@ -312,6 +312,28 @@ func leptEncodeUTF8(u uint64) []byte {
 	}
 	return buf[:write-1]
 }
+// encoding/json/decode.go
+
+b := make([]byte, len(s)+2*utf8.UTFMax)
+  1045				case 'u':
+  1046					r--
+  1047					rr := getu4(s[r:])
+  1048					if rr < 0 {
+  1049						return
+  1050					}
+  1051					r += 6
+  1052					if utf16.IsSurrogate(rr) {
+  1053						rr1 := getu4(s[r:])
+  1054						if dec := utf16.DecodeRune(rr, rr1); dec != unicode.ReplacementChar {
+  1055							// A valid pair; consume.
+  1056							r += 6
+  1057							w += utf8.EncodeRune(b[w:], dec)
+  1058							break
+  1059						}
+  1060						// Invalid surrogate; fall back to replacement rune.
+  1061						rr = unicode.ReplacementChar
+  1062					}
+  1063					w += utf8.EncodeRune(b[w:], rr)
 ```
 所以对于 u，针对每一个区间计算出对应的 uint64，再使用 leptEncodeUTF8 得到可以写入 buffer 的 []byte 数组
 buffer.String() 可以得到完整的 utf8 解码字符串

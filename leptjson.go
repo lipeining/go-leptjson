@@ -2,7 +2,9 @@ package goleptjson
 
 import (
 	"bytes"
+	"encoding"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -1299,13 +1301,14 @@ func ToArray(v *LeptValue) []interface{} {
 // ToStruct transfer the LeptValue to a struct{} or []struct{}
 func ToStruct(v *LeptValue, structure interface{}) error {
 	rv := reflect.ValueOf(structure)
-	if rv.Kind() != reflect.Ptr || rv.IsNil() {
-		return fmt.Errorf("structure is not a ptr: %v", reflect.TypeOf(v))
-	}
 	if !rv.IsValid() {
 		return fmt.Errorf("structure value is not valid")
 	}
-	rv = rv.Elem()
+	if rv.Kind() != reflect.Ptr || rv.IsNil() {
+		return fmt.Errorf("structure is not a ptr: %v", reflect.TypeOf(v))
+	}
+	// rv = rv.Elem()
+	// 这里将全部的 indirect 交给对应的方法实现
 	if rv.Kind() == reflect.Slice || rv.Kind() == reflect.Array {
 		return toSlice(v, rv)
 	} else if rv.Kind() == reflect.Struct {
@@ -1315,10 +1318,103 @@ func ToStruct(v *LeptValue, structure interface{}) error {
 	}
 	return fmt.Errorf("structure value is not a ptr of slice or struct")
 }
+
+// 可以学习 encoding/json/decode.go
+// 添加一个 indirect 方法，在里面进行不断地递归
+// 321	// indirect walks down v allocating pointers as needed,
+// 322	// until it gets to a non-pointer.
+// 323	// if it encounters an Unmarshaler, indirect stops and returns that.
+// 324	// if decodingNull is true, indirect stops at the last pointer so it can be set to nil.
+// 325	func (d *decodeState) indirect(v reflect.Value, decodingNull bool) (Unmarshaler, encoding.TextUnmarshaler, reflect.Value) {
+// 326		// If v is a named type and is addressable,
+// 327		// start with its address, so that if the type has pointer methods,
+// 328		// we find them.
+// 329		if v.Kind() != reflect.Ptr && v.Type().Name() != "" && v.CanAddr() {
+// 330			v = v.Addr()
+// 331		}
+// 332		for {
+// 333			// Load value from interface, but only if the result will be
+// 334			// usefully addressable.
+// 335			if v.Kind() == reflect.Interface && !v.IsNil() {
+// 336				e := v.Elem()
+// 337				if e.Kind() == reflect.Ptr && !e.IsNil() && (!decodingNull || e.Elem().Kind() == reflect.Ptr) {
+// 338					v = e
+// 339					continue
+// 340				}
+// 341			}
+// 342
+// 343			if v.Kind() != reflect.Ptr {
+// 344				break
+// 345			}
+// 346
+// 347			if v.Elem().Kind() != reflect.Ptr && decodingNull && v.CanSet() {
+// 348				break
+// 349			}
+// 350			if v.IsNil() {
+// 351				v.Set(reflect.New(v.Type().Elem()))
+// 352			}
+// 353			if v.Type().NumMethod() > 0 {
+// 354				if u, ok := v.Interface().(Unmarshaler); ok {
+// 355					return u, nil, reflect.Value{}
+// 356				}
+// 357				if u, ok := v.Interface().(encoding.TextUnmarshaler); ok {
+// 358					return nil, u, reflect.Value{}
+// 359				}
+// 360			}
+// 361			v = v.Elem()
+// 362		}
+// 363		return nil, nil, v
+// 364	}
+
+// indirect walks down v allocating pointers as needed,
+// until it gets to a non-pointer.
+// if it encounters an Unmarshaler, indirect stops and returns that.
+// if decodingNull is true, indirect stops at the last pointer so it can be set to nil.
+func indirect(v reflect.Value, decodingNull bool) (json.Unmarshaler, encoding.TextUnmarshaler, reflect.Value) {
+	// If v is a named type and is addressable,
+	// start with its address, so that if the type has pointer methods,
+	// we find them.
+	if v.Kind() != reflect.Ptr && v.Type().Name() != "" && v.CanAddr() {
+		v = v.Addr()
+	}
+	for {
+		// Load value from interface, but only if the result will be
+		// usefully addressable.
+		if v.Kind() == reflect.Interface && !v.IsNil() {
+			e := v.Elem()
+			if e.Kind() == reflect.Ptr && !e.IsNil() && (!decodingNull || e.Elem().Kind() == reflect.Ptr) {
+				v = e
+				continue
+			}
+		}
+		if v.Kind() != reflect.Ptr {
+			break
+		}
+		if v.Elem().Kind() != reflect.Ptr && decodingNull && v.CanSet() {
+			break
+		}
+		if v.IsNil() {
+			v.Set(reflect.New(v.Type().Elem()))
+		}
+		if v.Type().NumMethod() > 0 {
+			if u, ok := v.Interface().(json.Unmarshaler); ok {
+				return u, nil, reflect.Value{}
+			}
+			if u, ok := v.Interface().(encoding.TextUnmarshaler); ok {
+				return nil, u, reflect.Value{}
+			}
+		}
+		v = v.Elem()
+	}
+	return nil, nil, v
+}
 func toValue(v *LeptValue, rv reflect.Value) error {
 	// if rv.Kind() == reflect.Ptr {
 	// 	rv = rv.Elem()
 	// }
+	if !rv.IsValid() {
+		return fmt.Errorf("v is not valid")
+	}
 	if rv.Kind() == reflect.Array || rv.Kind() == reflect.Slice {
 		return toSlice(v, rv)
 	} else if rv.Kind() == reflect.Struct {
@@ -1327,6 +1423,23 @@ func toValue(v *LeptValue, rv reflect.Value) error {
 		return toMap(v, rv)
 	}
 	// todo 晋级的 **ptr ****ptr 形式该如何处理。
+	u, ut, pv := indirect(rv, false)
+	if u != nil {
+		err := u.UnmarshalJSON([]byte(""))
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+	if ut != nil {
+		err := ut.UnmarshalText([]byte(""))
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+	rv = pv
+	// 这里开始，应该只有  bool, string, number
 	switch rv.Kind() {
 	case reflect.Ptr:
 		if v == nil {
@@ -1478,6 +1591,13 @@ func toMap(v *LeptValue, rv reflect.Value) error {
 	if rv.IsNil() {
 		rv.Set(reflect.MakeMap(rv.Type()))
 	}
+	// encoding/json/decode.go 如何处理 map[key]value 的 key
+	// // Write value back to map;
+	// // if using struct, subv points into struct already.
+	// if v.Kind() == reflect.Map {
+	// 	kv := reflect.ValueOf(key).Convert(v.Type().Key())
+	// 	v.SetMapIndex(kv, subv)
+	// }
 	for i := 0; i < vsize; i++ {
 		lik := LeptGetObjectKey(v, i)
 		liv := LeptGetObjectValue(v, i)
@@ -1493,12 +1613,28 @@ func toMap(v *LeptValue, rv reflect.Value) error {
 		// rikv := reflect.New(rikt).Elem()
 		// rikv.Set(reflect.ValueOf(lik))
 		rikv := reflect.ValueOf(lik)
+		// 这里的 key 应该是 []byte
+		// value of type []uint8 cannot be converted to type int
+		// rikv := reflect.ValueOf([]byte(lik)).Convert(rv.Type().Key())
+		// rikv := reflect.ValueOf(bytes.NewBufferString(lik).Bytes()).Convert(rv.Type().Key())
 		rivt := rv.Type().Elem() // get the value type
-		rivp := reflect.New(rivt)
-		if err := toValue(liv, rivp); err != nil {
+		// 很可能对应的 elemType 并没有值，只是 Zero nil
+		// rivp := reflect.New(rivt)
+		// 可以考虑生成一个 Pointer，但是这部分的逻辑应该放在
+		// toValue 中解决， toValue 中应该处理 Kind() ptr
+		// elemType := v.Type().Elem()
+		// 		if !mapElem.IsValid() {
+		// 			mapElem = reflect.New(elemType).Elem()
+		// 		} else {
+		// 			mapElem.Set(reflect.Zero(elemType))
+		// 		}
+		var rivv reflect.Value
+		// rivv.Set(reflect.Zero(rivt))
+		rivv = reflect.New(rivt).Elem()
+		if err := toValue(liv, rivv); err != nil {
 			return err
 		}
-		rv.SetMapIndex(rikv, reflect.Indirect(rivp))
+		rv.SetMapIndex(rikv, rivv)
 	}
 	return nil
 }
