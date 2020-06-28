@@ -884,10 +884,23 @@ func TestToArray(t *testing.T) {
 	}
 }
 func TestToStruct(t *testing.T) {
+	subStr := " { " +
+		"\"T\" : true , " +
+		"\"A\" : [ 1, 2, 3 ]," +
+		"\"O\" : { \"1\" : 1, \"2\" : 2, \"3\" : 3 }" +
+		" } "
+	subsStr := " [ " +
+		subStr +
+		" ] "
 	input := " { " +
-		"\"n\" : null , " +
-		"\"f\" : false , " +
-		"\"ff\" : false , " +
+		"\"NP\" : null , " +
+		"\"FP\" : false , " +
+		"\"FPP\" : false , " +
+		"\"TPP\" : true , " +
+		"\"E\" : 4.1, " +
+		"\"Subs\" : " + subsStr + ", " +
+		"\"Sub\" : " + subStr + ", " +
+		"\"IO\" : { \"1\" : 1, \"2\" : 2, \"3\" : 3 }, " +
 		"\"N\" : null , " +
 		"\"F\" : false , " +
 		"\"T\" : true , " +
@@ -910,27 +923,27 @@ func TestToStruct(t *testing.T) {
 	// fmt.Println(ToInterface(v))
 	// fmt.Println(ToMap(v))
 	type SubStruct struct {
-		t *bool
 		T *bool
-		a *[]int
-		o *map[string]int
 		A []int          `json:"A"`
 		O map[string]int `json:"O"`
 	}
 	type obj struct {
-		// n  *interface{} `json:"n"`
-		// f  *bool        `json:"f"`
-		// ff **bool       `json:"f"`
-		// t *bool           `json:"t"`
+		NP  *interface{} `json:"np"`
+		FP  *bool        `json:"fp"`
+		FPP **bool       `json:"fpp"`
+		TPP **bool       `json:"tpp"`
 		// i *int            `json:"i"`
 		// s *string         `json:"s"`
 		// a *[]int          `json:"a"`
 		// o *map[string]int `json:"o"`
 
-		subs []*SubStruct
+		E LeptEvent
+		// subs []*SubStruct
 		Subs []SubStruct
-		sub  *SubStruct
-		Sub  SubStruct
+		// sub  *SubStruct
+		Sub SubStruct
+
+		IO interface{} `json:"IO"`
 
 		N interface{}    `json:"N"`
 		F bool           `json:"F"`
@@ -951,8 +964,23 @@ func TestToStruct(t *testing.T) {
 			if vi := structure.N; vi != nil {
 				t.Errorf("obj.N should be nil")
 			}
-			if vi := structure.F; vi != false {
-				t.Errorf("obj.F should be false")
+			if vi := structure.NP; vi != nil {
+				t.Errorf("obj.NP should be false")
+			}
+			if vi := structure.FP; *vi != false {
+				t.Errorf("obj.FP should be false")
+			}
+			if vi := structure.FPP; **vi != false {
+				t.Errorf("obj.FPP should be false")
+			}
+			if vi := structure.TPP; **vi != true {
+				t.Errorf("obj.TPP should be false")
+			}
+			if vi := structure.E; vi != 4 {
+				t.Errorf("obj.E should be 4")
+			}
+			if vii, ok := structure.IO.(map[string]interface{}); !ok || len(vii) != 3 {
+				t.Errorf("obj.IO should be interface{} map[string]interface{} ")
 			}
 			if vi := structure.T; vi != true {
 				t.Errorf("obj.T should be true")
@@ -975,11 +1003,46 @@ func TestToStruct(t *testing.T) {
 			if vi := structure.O; len(vi) != 3 {
 				t.Errorf("obj.O should be map and len = 3 ")
 			} else {
-				// for jindex, j := range []string{"1", "2", "3"} {
-				// 	if vi[j] != jindex+1 {
-				// 		t.Errorf("obj.O[%v] should be %v ", j, jindex+1)
-				// 	}
-				// }
+				for jindex, j := range []string{"1", "2", "3"} {
+					if vi[j] != jindex+1 {
+						t.Errorf("obj.O[%v] should be %v ", j, jindex+1)
+					}
+				}
+			}
+			if vi := structure.Subs; len(vi) != 1 {
+				t.Errorf("obj.Subs should be slice and len = 1 ")
+			} else {
+				for _, vi := range structure.Subs {
+					if vit := vi.T; *vit != true {
+						t.Errorf("*(obj.Subs[0].T) should be true")
+					}
+					for j := 0; j < 3; j++ {
+						if vi.A[j] != j+1 {
+							t.Errorf("obj.Subs[0].A[%v] should be %v ", j, j+1)
+						}
+					}
+					for jindex, j := range []string{"1", "2", "3"} {
+						if vi.O[j] != jindex+1 {
+							t.Errorf("obj.Subs[0].O[%v] should be %v ", j, jindex+1)
+						}
+					}
+				}
+			}
+			{
+				vi := structure.Sub
+				if vit := vi.T; *vit != true {
+					t.Errorf("*(obj.Sub.T) should be true")
+				}
+				for j := 0; j < 3; j++ {
+					if vi.A[j] != j+1 {
+						t.Errorf("obj.Sub.A[%v] should be %v ", j, j+1)
+					}
+				}
+				for jindex, j := range []string{"1", "2", "3"} {
+					if vi.O[j] != jindex+1 {
+						t.Errorf("obj.Sub.O[%v] should be %v ", j, jindex+1)
+					}
+				}
 			}
 		}
 	}

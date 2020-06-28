@@ -374,6 +374,19 @@ interface{} 的层次结构体。需要用户自行使用 .(string) .([]string) 
 ### struct
 在对应的基础上，可以使用 []struct{} struct{} 实现 encoding/json 中的
 方法，将 json 字符串映射到 struct 中。
+```sh
+panic: reflect: reflect.flag.mustBeAssignable using value obtained using unexported field [recovered]
+```
+对于定义的解构 obj 无法反射回  unexported field 即
+```go
+  type sub {
+    t *bool
+		T *bool
+		a *[]int
+		o *map[string]int
+  }
+```
+
 ```go
 func ToStruct(v *LeptValue, structure interface{}) error {
 }
@@ -443,6 +456,13 @@ todo 实现 struct.field. ptr 的结构体解析
 当前的反射中没有处理 reflect.Ptr reflect.Interface reflect.Chan reflect.Func 的情况，是否需要考虑
 主要是 reflect.Ptr 的问题。
 下面列举 reflect 包的处理方式，需要取得 x.Elem() 得到 Type() 进行 Setxxx()
+这里需要借鉴 encoding/json/decode.go 里面的 indirect 方法，不断地迭代
+ptr 类型， 将对应的值进行初始化为指针。
+```go
+if v.IsNil() {
+  v.Set(reflect.New(v.Type().Elem()))
+}
+```
 ```go
 if v.IsNil() {
   v.Set(reflect.New(v.Type().Elem()))

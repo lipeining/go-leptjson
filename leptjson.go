@@ -10,7 +10,6 @@ import (
 	"math"
 	"reflect"
 	"strconv"
-	"unsafe"
 )
 
 var (
@@ -1307,16 +1306,17 @@ func ToStruct(v *LeptValue, structure interface{}) error {
 	if rv.Kind() != reflect.Ptr || rv.IsNil() {
 		return fmt.Errorf("structure is not a ptr: %v", reflect.TypeOf(v))
 	}
+	return toValue(v, rv)
 	// rv = rv.Elem()
-	// 这里将全部的 indirect 交给对应的方法实现
-	if rv.Kind() == reflect.Slice || rv.Kind() == reflect.Array {
-		return toSlice(v, rv)
-	} else if rv.Kind() == reflect.Struct {
-		return toStruct(v, rv)
-	} else if rv.Kind() == reflect.Map {
-		return toMap(v, rv)
-	}
-	return fmt.Errorf("structure value is not a ptr of slice or struct")
+	// 这里在对应的方法体内使用 indirect 处理 ptr
+	// if rv.Kind() == reflect.Slice || rv.Kind() == reflect.Array {
+	// 	return toSlice(v, rv)
+	// } else if rv.Kind() == reflect.Struct {
+	// 	return toStruct(v, rv)
+	// } else if rv.Kind() == reflect.Map {
+	// 	return toMap(v, rv)
+	// }
+	// return fmt.Errorf("structure value is not a ptr of slice or struct")
 }
 
 // 可以学习 encoding/json/decode.go
@@ -1366,6 +1366,12 @@ func ToStruct(v *LeptValue, structure interface{}) error {
 // 363		return nil, nil, v
 // 364	}
 
+// Unmarshaler 导出的解析 json 的方法体
+type Unmarshaler interface {
+	// UnmarshalJSON get v and rv to set rv of
+	UnmarshalJSON(v *LeptValue, rv reflect.Value) error
+}
+
 // indirect walks down v allocating pointers as needed,
 // until it gets to a non-pointer.
 // if it encounters an Unmarshaler, indirect stops and returns that.
@@ -1393,6 +1399,7 @@ func indirect(v reflect.Value, decodingNull bool) (json.Unmarshaler, encoding.Te
 		if v.Elem().Kind() != reflect.Ptr && decodingNull && v.CanSet() {
 			break
 		}
+		// fmt.Println(v, v.Type())
 		if v.IsNil() {
 			v.Set(reflect.New(v.Type().Elem()))
 		}
@@ -1415,15 +1422,9 @@ func toValue(v *LeptValue, rv reflect.Value) error {
 	if !rv.IsValid() {
 		return fmt.Errorf("v is not valid")
 	}
-	if rv.Kind() == reflect.Array || rv.Kind() == reflect.Slice {
-		return toSlice(v, rv)
-	} else if rv.Kind() == reflect.Struct {
-		return toStruct(v, rv)
-	} else if rv.Kind() == reflect.Map {
-		return toMap(v, rv)
-	}
-	// todo 晋级的 **ptr ****ptr 形式该如何处理。
-	u, ut, pv := indirect(rv, false)
+	// 针对自定义类型，需要判断是否有 UnmarshalJSON 方法
+	decodingNull := v != nil && v.typ == LeptNull
+	u, ut, pv := indirect(rv, decodingNull)
 	if u != nil {
 		err := u.UnmarshalJSON([]byte(""))
 		if err != nil {
@@ -1439,29 +1440,27 @@ func toValue(v *LeptValue, rv reflect.Value) error {
 		return nil
 	}
 	rv = pv
+	if rv.Kind() == reflect.Array || rv.Kind() == reflect.Slice {
+		return toSlice(v, rv)
+	} else if rv.Kind() == reflect.Struct {
+		return toStruct(v, rv)
+	} else if rv.Kind() == reflect.Map {
+		return toMap(v, rv)
+	}
 	// 这里开始，应该只有  bool, string, number
+	// fmt.Println(rv.Type()) // goleptjson.LeptEvent
+	// 可以传入自定义的 LeptEvent 对应的 Kind 还是包含在基本的 Kind 枚举中
 	switch rv.Kind() {
 	case reflect.Ptr:
-		if v == nil {
-
-		} else {
-			// rvt := reflect.New(rv.Type())
-			// toValue(v, reflect.Indirect(rvt))
-			// rv.Set(rvt)
-			// fmt.Println(rv.IsValid())
-			fmt.Println(rv.Type())
-			var p unsafe.Pointer
-			pr := reflect.NewAt(rv.Type(), p)
-			fmt.Println(pr.Type())
-			i := rv.Interface()
-			fmt.Println(reflect.TypeOf(i))
-			// fmt.Println(reflect.PtrTo(reflect.TypeOf(i)))
-			// fmt.Println(reflect.PtrTo(rv.Elem().Type()))
-		}
+		// 不会出现这种情况
+		fmt.Println("toValue got reflect.Ptr of v ", v)
 	case reflect.Interface:
-		// 可能对应的 rv 为 []interface{}
+		// 可能对应的 rv 为 []interface{} interface{}
+		fmt.Println("toValue got reflect.Interface of v ", v, rv)
 		if v == nil {
-			// rv.Set(reflect.Zero(rv.Type()))
+			rv.Set(reflect.Zero(rv.Type()))
+		} else if rv.NumMethod() != 0 {
+			return fmt.Errorf("umarshal v %v into type %v", v, rv.Type())
 		} else {
 			// 不能在 interface 上面进行各种 SetBool, SetFloat 操作
 			switch v.typ {
@@ -1544,8 +1543,29 @@ func toValue(v *LeptValue, rv reflect.Value) error {
 	return nil
 }
 func toStruct(v *LeptValue, rv reflect.Value) error {
+	if !rv.IsValid() {
+		return fmt.Errorf("v is not valid")
+	}
+	decodingNull := v != nil && v.typ == LeptNull
+	u, ut, pv := indirect(rv, decodingNull)
+	if u != nil {
+		err := u.UnmarshalJSON([]byte(""))
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+	if ut != nil {
+		err := ut.UnmarshalText([]byte(""))
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+	rv = pv
 	size := rv.NumField()
 	rt := rv.Type()
+	// 这里没有考虑到 嵌套匿名字段 的处理
 	for i := 0; i < size; i++ {
 		fit := rt.Field(i)
 		fiName := fit.Name
@@ -1565,21 +1585,26 @@ func toStruct(v *LeptValue, rv reflect.Value) error {
 	return nil
 }
 func toMap(v *LeptValue, rv reflect.Value) error {
-	// for _, key := range rv.MapKeys() {
-	// 	fiv := rv.MapIndex(key)
-	// 	if v == nil {
-	// 		if err := toValue(v, fiv); err != nil {
-	// 			return err
-	// 		}
-	// 	} else if v.typ != LeptObject {
-	// 		return fmt.Errorf("v LeptValue is not a object: %v", v.typ)
-	// 	} else {
-	// 		liv := LeptFindObjectValue(v, key.Type().Name())
-	// 		if err := toValue(liv, fiv); err != nil {
-	// 			return err
-	// 		}
-	// 	}
-	// }
+	if !rv.IsValid() {
+		return fmt.Errorf("v is not valid")
+	}
+	decodingNull := v != nil && v.typ == LeptNull
+	u, ut, pv := indirect(rv, decodingNull)
+	if u != nil {
+		err := u.UnmarshalJSON([]byte(""))
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+	if ut != nil {
+		err := ut.UnmarshalText([]byte(""))
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+	rv = pv
 	vsize := 0
 	if v == nil {
 	} else if v.typ != LeptObject {
@@ -1638,8 +1663,27 @@ func toMap(v *LeptValue, rv reflect.Value) error {
 	}
 	return nil
 }
-
 func toSlice(v *LeptValue, rv reflect.Value) error {
+	if !rv.IsValid() {
+		return fmt.Errorf("v is not valid")
+	}
+	decodingNull := v != nil && v.typ == LeptNull
+	u, ut, pv := indirect(rv, decodingNull)
+	if u != nil {
+		err := u.UnmarshalJSON([]byte(""))
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+	if ut != nil {
+		err := ut.UnmarshalText([]byte(""))
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+	rv = pv
 	size := rv.Len()
 	vsize := 0
 	if v == nil {
