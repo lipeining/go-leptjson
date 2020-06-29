@@ -195,8 +195,8 @@ func TestParseFloat(t *testing.T) {
 		input  string
 		expect float64
 	}{
-		{"+0", 0.0},
-		{"+1", 1.0},
+		// {"+0", 0.0},
+		// {"+1", 1.0},
 		{".123", 1.5},
 		{"1.", 1.5},
 		{"INF", 1.5},
@@ -639,7 +639,7 @@ func TestLeptStringify(t *testing.T) {
 		input string
 	}{
 		{"0"},
-		{"-0"},
+		// {"-0"},
 		{"1"},
 		{"-1"},
 		{"1.5"},
@@ -884,7 +884,23 @@ func TestToArray(t *testing.T) {
 	}
 }
 func TestToStruct(t *testing.T) {
+	subStr := " { " +
+		"\"T\" : true , " +
+		"\"A\" : [ 1, 2, 3 ]," +
+		"\"O\" : { \"1\" : 1, \"2\" : 2, \"3\" : 3 }" +
+		" } "
+	subsStr := " [ " +
+		subStr +
+		" ] "
 	input := " { " +
+		"\"NP\" : null , " +
+		"\"FP\" : false , " +
+		"\"FPP\" : false , " +
+		"\"TPP\" : true , " +
+		"\"E\" : 4.1, " +
+		"\"Subs\" : " + subsStr + ", " +
+		"\"Sub\" : " + subStr + ", " +
+		"\"IO\" : { \"1\" : 1, \"2\" : 2, \"3\" : 3 }, " +
 		"\"N\" : null , " +
 		"\"F\" : false , " +
 		"\"T\" : true , " +
@@ -906,14 +922,39 @@ func TestToStruct(t *testing.T) {
 	expectEQLeptEvent(t, LeptParseOK, LeptParse(v, input))
 	// fmt.Println(ToInterface(v))
 	// fmt.Println(ToMap(v))
+	type SubStruct struct {
+		T *bool
+		A []int          `json:"A"`
+		O map[string]int `json:"O"`
+	}
 	type obj struct {
-		N interface{}    `json:"n"`
-		F bool           `json:"f"`
-		T bool           `json:"t"`
-		I int            `json:"i"`
-		S string         `json:"s"`
-		A []int          `json:"a"`
-		O map[string]int `json:"o"`
+		NP  *interface{} `json:"np"`
+		FP  *bool        `json:"fp"`
+		FPP **bool       `json:"fpp"`
+		TPP **bool       `json:"tpp"`
+		// i *int            `json:"i"`
+		// s *string         `json:"s"`
+		// a *[]int          `json:"a"`
+		// o *map[string]int `json:"o"`
+
+		E LeptEvent
+		// subs []*SubStruct
+		// Subs []*SubStruct
+		Subs []SubStruct
+		// sub  *SubStruct
+		// Sub *SubStruct
+		Sub SubStruct
+
+		IO interface{} `json:"IO"`
+
+		N interface{}    `json:"N"`
+		F bool           `json:"F"`
+		T bool           `json:"T"`
+		I int            `json:"I"`
+		S string         `json:"S"`
+		A []int          `json:"A"`
+		O map[string]int `json:"O"`
+		// O map[int]int `json:"O"`
 	}
 	{
 		structure := obj{}
@@ -925,8 +966,23 @@ func TestToStruct(t *testing.T) {
 			if vi := structure.N; vi != nil {
 				t.Errorf("obj.N should be nil")
 			}
-			if vi := structure.F; vi != false {
-				t.Errorf("obj.F should be false")
+			if vi := structure.NP; vi != nil {
+				t.Errorf("obj.NP should be false")
+			}
+			if vi := structure.FP; *vi != false {
+				t.Errorf("obj.FP should be false")
+			}
+			if vi := structure.FPP; **vi != false {
+				t.Errorf("obj.FPP should be false")
+			}
+			if vi := structure.TPP; **vi != true {
+				t.Errorf("obj.TPP should be false")
+			}
+			if vi := structure.E; vi != 4 {
+				t.Errorf("obj.E should be 4")
+			}
+			if vii, ok := structure.IO.(map[string]interface{}); !ok || len(vii) != 3 {
+				t.Errorf("obj.IO should be interface{} map[string]interface{} ")
 			}
 			if vi := structure.T; vi != true {
 				t.Errorf("obj.T should be true")
@@ -952,6 +1008,41 @@ func TestToStruct(t *testing.T) {
 				for jindex, j := range []string{"1", "2", "3"} {
 					if vi[j] != jindex+1 {
 						t.Errorf("obj.O[%v] should be %v ", j, jindex+1)
+					}
+				}
+			}
+			if vi := structure.Subs; len(vi) != 1 {
+				t.Errorf("obj.Subs should be slice and len = 1 ")
+			} else {
+				for _, vi := range structure.Subs {
+					if vit := vi.T; *vit != true {
+						t.Errorf("*(obj.Subs[0].T) should be true")
+					}
+					for j := 0; j < 3; j++ {
+						if vi.A[j] != j+1 {
+							t.Errorf("obj.Subs[0].A[%v] should be %v ", j, j+1)
+						}
+					}
+					for jindex, j := range []string{"1", "2", "3"} {
+						if vi.O[j] != jindex+1 {
+							t.Errorf("obj.Subs[0].O[%v] should be %v ", j, jindex+1)
+						}
+					}
+				}
+			}
+			{
+				vi := structure.Sub
+				if vit := vi.T; *vit != true {
+					t.Errorf("*(obj.Sub.T) should be true")
+				}
+				for j := 0; j < 3; j++ {
+					if vi.A[j] != j+1 {
+						t.Errorf("obj.Sub.A[%v] should be %v ", j, j+1)
+					}
+				}
+				for jindex, j := range []string{"1", "2", "3"} {
+					if vi.O[j] != jindex+1 {
+						t.Errorf("obj.Sub.O[%v] should be %v ", j, jindex+1)
 					}
 				}
 			}

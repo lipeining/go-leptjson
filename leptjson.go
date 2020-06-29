@@ -644,68 +644,6 @@ func leptParseHex4(input string) (uint64, error) {
 	return u, nil
 }
 
-// func hex() {
-// 	bufSize := 8
-// 	buf := make([]byte, bufSize)
-// 	write := 0
-// 	if u <= 0x007F {
-// 		write = binary.PutUvarint(buf, u&0xFF)
-// 		stack.Write(buf[:write])
-// 	} else if u >= 0x0080 && u <= 0x07FF {
-// 		write = binary.PutUvarint(buf, 0xC0|((u>>6)&0xFF))
-// 		stack.Write(buf[:write])
-// 		write = binary.PutUvarint(buf, 0x80|(u&0x3F))
-// 		stack.Write(buf[:write])
-// 	} else if u >= 0x0800 && u <= 0xFFFF {
-// 		write = binary.PutUvarint(buf, 0xE0|((u>>12)&0xFF))
-// 		stack.Write(buf[:write])
-// 		write = binary.PutUvarint(buf, 0x80|((u>>6)&0x3F))
-// 		stack.Write(buf[:write])
-// 		write = binary.PutUvarint(buf, 0x80|(u&0x3F))
-// 		stack.Write(buf[:write])
-// 	} else if u >= 0x10000 && u <= 0x10FFFF {
-// 		write = binary.PutUvarint(buf, 0xF0|((u>>18)&0xFF))
-// 		stack.Write(buf[:write])
-// 		write = binary.PutUvarint(buf, 0x80|((u>>12)&0x3F))
-// 		stack.Write(buf[:write])
-// 		write = binary.PutUvarint(buf, 0x80|((u>>6)&0x3F))
-// 		stack.Write(buf[:write])
-// 		write = binary.PutUvarint(buf, 0x80|(u&0x3F))
-// 		stack.Write(buf[:write])
-// 	} else {
-// 		panic("u is illegal")
-// 	}
-// }
-// func leptEncodeUTF8(u uint64) string {
-// 	// 针对 四个区间         码点位数   字节1      字节2      字节3     字节4
-// 	// 0x0000 - 0x007F      7         0xxxxxxx
-// 	// 0x0080 - 0x07FF      11        1100xxxx   10xxxxxx
-// 	// 0x0800 - 0xFFFF      16        1110xxxx   10xxxxxx  10xxxxxx
-// 	// 0x10000 - 0x10FFFF   21        11110xxx   10xxxxxx  10xxxxxx  10xxxxxx
-// 	if u <= 0x007F {
-// 		return formatUintToHex(u)
-// 	}
-// 	if u >= 0x0080 && u <= 0x07FF {
-// 		return formatUintToHex(0xC0|((u>>6)&0xFF)) +
-// 			formatUintToHex(0x80|(u&0x3F))
-// 	}
-// 	if u >= 0x0800 && u <= 0xFFFF {
-// 		return formatUintToHex(0xE0|((u>>12)&0xFF)) +
-// 			formatUintToHex(0x80|((u>>6)&0x3F)) +
-// 			formatUintToHex(0x80|(u&0x3F))
-// 	}
-// 	if u >= 0x10000 && u <= 0x10FFFF {
-// 		return formatUintToHex(0xF0|((u>>18)&0xFF)) +
-// 			formatUintToHex(0x80|((u>>12)&0x3F)) +
-// 			formatUintToHex(0x80|((u>>6)&0x3F)) +
-// 			formatUintToHex(0x80|(u&0x3F))
-// 	}
-// 	return "illegal-utf8-string"
-// }
-// func formatUintToHex(num uint64) string {
-// 	return strconv.FormatUint(num, 16)
-// }
-
 // LeptParseValue use to parse value switch to spec func
 func LeptParseValue(c *LeptContext, v *LeptValue) LeptEvent {
 	n := len(c.json)
@@ -1360,26 +1298,89 @@ func ToArray(v *LeptValue) []interface{} {
 // ToStruct transfer the LeptValue to a struct{} or []struct{}
 func ToStruct(v *LeptValue, structure interface{}) error {
 	rv := reflect.ValueOf(structure)
-	if rv.Kind() != reflect.Ptr || rv.IsNil() {
-		return fmt.Errorf("structure is not a ptr: %v", reflect.TypeOf(v))
-	}
 	if !rv.IsValid() {
 		return fmt.Errorf("structure value is not valid")
 	}
-	rv = rv.Elem()
-	if rv.Kind() == reflect.Slice || rv.Kind() == reflect.Array {
-		return toSlice(v, rv)
-	} else if rv.Kind() == reflect.Struct {
-		return toStruct(v, rv)
-	} else if rv.Kind() == reflect.Map {
-		return toMap(v, rv)
+	if rv.Kind() != reflect.Ptr || rv.IsNil() {
+		return fmt.Errorf("structure is not a ptr: %v", reflect.TypeOf(v))
 	}
-	return fmt.Errorf("structure value is not a ptr of slice or struct")
+	return toValue(v, rv)
+	// rv = rv.Elem()
+	// 这里在对应的方法体内使用 indirect 处理 ptr
+	// if rv.Kind() == reflect.Slice || rv.Kind() == reflect.Array {
+	// 	return toSlice(v, rv)
+	// } else if rv.Kind() == reflect.Struct {
+	// 	return toStruct(v, rv)
+	// } else if rv.Kind() == reflect.Map {
+	// 	return toMap(v, rv)
+	// }
+	// return fmt.Errorf("structure value is not a ptr of slice or struct")
+}
+
+// Unmarshaler 导出的解析 json 的方法体
+type Unmarshaler interface {
+	// UnmarshalJSON get v and rv to set rv of
+	UnmarshalJSON(v *LeptValue, rv reflect.Value) error
+}
+
+// 可以学习 encoding/json/decode.go
+// 添加一个 indirect 方法，在里面进行不断地递归
+
+// indirect walks down v allocating pointers as needed,
+// until it gets to a non-pointer.
+// if it encounters an Unmarshaler, indirect stops and returns that.
+// if decodingNull is true, indirect stops at the last pointer so it can be set to nil.
+func indirect(v reflect.Value, decodingNull bool) (Unmarshaler, reflect.Value) {
+	// If v is a named type and is addressable,
+	// start with its address, so that if the type has pointer methods,
+	// we find them.
+	if v.Kind() != reflect.Ptr && v.Type().Name() != "" && v.CanAddr() {
+		v = v.Addr()
+	}
+	for {
+		// Load value from interface, but only if the result will be
+		// usefully addressable.
+		if v.Kind() == reflect.Interface && !v.IsNil() {
+			e := v.Elem()
+			if e.Kind() == reflect.Ptr && !e.IsNil() && (!decodingNull || e.Elem().Kind() == reflect.Ptr) {
+				v = e
+				continue
+			}
+		}
+		if v.Kind() != reflect.Ptr {
+			break
+		}
+		if v.Elem().Kind() != reflect.Ptr && decodingNull && v.CanSet() {
+			break
+		}
+		// fmt.Println(v, v.Type())
+		if v.IsNil() {
+			v.Set(reflect.New(v.Type().Elem()))
+		}
+		if v.Type().NumMethod() > 0 {
+			if u, ok := v.Interface().(Unmarshaler); ok {
+				return u, reflect.Value{}
+			}
+		}
+		v = v.Elem()
+	}
+	return nil, v
 }
 func toValue(v *LeptValue, rv reflect.Value) error {
-	if rv.Kind() == reflect.Ptr {
-		rv = rv.Elem()
+	// if rv.Kind() == reflect.Ptr {
+	// 	rv = rv.Elem()
+	// }
+	if !rv.IsValid() {
+		return fmt.Errorf("v is not valid")
 	}
+	// 针对自定义类型，需要判断是否有 UnmarshalJSON 方法
+	decodingNull := v != nil && v.typ == LeptNull
+	u, pv := indirect(rv, decodingNull)
+	if u != nil {
+		err := u.UnmarshalJSON(v, pv)
+		return err
+	}
+	rv = pv
 	if rv.Kind() == reflect.Array || rv.Kind() == reflect.Slice {
 		return toSlice(v, rv)
 	} else if rv.Kind() == reflect.Struct {
@@ -1387,16 +1388,26 @@ func toValue(v *LeptValue, rv reflect.Value) error {
 	} else if rv.Kind() == reflect.Map {
 		return toMap(v, rv)
 	}
+	// 这里开始，应该只有  bool, string, number
+	// fmt.Println(rv.Type()) // goleptjson.LeptEvent
+	// 可以传入自定义的 LeptEvent 对应的 Kind 还是包含在基本的 Kind 枚举中
 	switch rv.Kind() {
+	case reflect.Ptr:
+		// 对应的 v 为 LeptNull 时， decodingNull = true
+		fmt.Println("toValue got reflect.Ptr of v ", v)
 	case reflect.Interface:
-		// 可能对应的 rv 为 []interface{}
+		// 可能对应的 rv 为 []interface{} interface{}
+		// fmt.Println("toValue got reflect.Interface of v ", v, rv)
 		if v == nil {
 			rv.Set(reflect.Zero(rv.Type()))
+		} else if rv.NumMethod() != 0 {
+			return fmt.Errorf("umarshal v %v into type %v", v, rv.Type())
 		} else {
 			// 不能在 interface 上面进行各种 SetBool, SetFloat 操作
 			switch v.typ {
 			case LeptNull:
-				rv.Set(reflect.Zero(rv.Type()))
+				// rv.Set(reflect.Zero(rv.Type()))
+				// rv.Set(reflect.ValueOf(nil))
 			case LeptFalse:
 				rv.Set(reflect.ValueOf(false))
 			case LeptTrue:
@@ -1410,16 +1421,9 @@ func toValue(v *LeptValue, rv reflect.Value) error {
 				toSlice(v, rvt)
 				rv.Set(rvt)
 			case LeptObject:
-				// rvt := reflect.MakeMapWithSize(reflect.MapOf(reflect.TypeOf("abc"), rv.Type()), len(v.o))
 				rvt := reflect.MakeMap(reflect.MapOf(reflect.TypeOf("abc"), rv.Type()))
-				// // mapStringInt := make(map[string]interface{})
-				// // mapType := reflect.TypeOf(mapStringInt)
-				// rvt := reflect.MakeMap(mapType)
-				// rvt.SetMapIndex(reflect.ValueOf("abc"), reflect.ValueOf(1))
-				// fmt.Println(rvt.CanAddr(), rvt.CanSet(), reflect.TypeOf("abc"), reflect.MapOf(reflect.TypeOf("abc"), rv.Type()), rvt.CanInterface(), rvt)
 				toMap(v, rvt)
 				rv.Set(rvt)
-				// rv.Set(reflect.Zero(rv.Type()))
 			default:
 				rv.Set(reflect.Zero(rv.Type()))
 			}
@@ -1467,22 +1471,39 @@ func toValue(v *LeptValue, rv reflect.Value) error {
 			return fmt.Errorf("v LeptValue is not a string: %v", v.typ)
 		}
 	default:
-		// just ignore other Kind like chan, Func
-		rv.Set(reflect.Zero(rv.Type()))
+		// just ignore other Kind like chan, Func=
+		if rv.IsValid() {
+			rv.Set(reflect.Zero(rv.Type()))
+		} else {
+			switch v.typ {
+
+			}
+		}
 	}
 	// fmt.Println(rv)
 	return nil
 }
 func toStruct(v *LeptValue, rv reflect.Value) error {
+	if !rv.IsValid() {
+		return fmt.Errorf("v is not valid")
+	}
+	decodingNull := v != nil && v.typ == LeptNull
+	u, pv := indirect(rv, decodingNull)
+	if u != nil {
+		err := u.UnmarshalJSON(v, pv)
+		return err
+	}
+	rv = pv
 	size := rv.NumField()
 	rt := rv.Type()
+	// 这里没有考虑到 嵌套匿名字段 的处理
 	for i := 0; i < size; i++ {
 		fit := rt.Field(i)
 		fiName := fit.Name
 		if v == nil {
-			if err := toValue(v, rv.Field(i)); err != nil {
-				return err
-			}
+			// if err := toValue(v, rv.Field(i)); err != nil {
+			// 	return err
+			// }
 		} else if v.typ != LeptObject {
 			return fmt.Errorf("v LeptValue is not a object: %v", v.typ)
 		} else {
@@ -1495,145 +1516,88 @@ func toStruct(v *LeptValue, rv reflect.Value) error {
 	return nil
 }
 func toMap(v *LeptValue, rv reflect.Value) error {
-	// for _, key := range rv.MapKeys() {
-	// 	fiv := rv.MapIndex(key)
-	// 	if v == nil {
-	// 		if err := toValue(v, fiv); err != nil {
-	// 			return err
-	// 		}
-	// 	} else if v.typ != LeptObject {
-	// 		return fmt.Errorf("v LeptValue is not a object: %v", v.typ)
-	// 	} else {
-	// 		liv := LeptFindObjectValue(v, key.Type().Name())
-	// 		if err := toValue(liv, fiv); err != nil {
-	// 			return err
-	// 		}
-	// 	}
-	// }
-	vsize := LeptGetObjectSize(v)
+	if !rv.IsValid() {
+		return fmt.Errorf("v is not valid")
+	}
+	decodingNull := v != nil && v.typ == LeptNull
+	u, pv := indirect(rv, decodingNull)
+	if u != nil {
+		err := u.UnmarshalJSON(v, pv)
+		return err
+	}
+	rv = pv
+	vsize := 0
+	if v == nil {
+	} else if v.typ != LeptObject {
+		return fmt.Errorf("v LeptValue is not a object: %v", v.typ)
+	} else {
+		vsize = LeptGetObjectSize(v)
+	}
 	// fix panic: assignment to entry in nil map [recovered]
 	if rv.IsNil() {
 		rv.Set(reflect.MakeMap(rv.Type()))
 	}
+	// encoding/json/decode.go 如何处理 map[key]value 的 key
+	// // Write value back to map;
+	// // if using struct, subv points into struct already.
+	// if v.Kind() == reflect.Map {
+	// 	kv := reflect.ValueOf(key).Convert(v.Type().Key())
+	// 	v.SetMapIndex(kv, subv)
+	// }
 	for i := 0; i < vsize; i++ {
 		lik := LeptGetObjectKey(v, i)
 		liv := LeptGetObjectValue(v, i)
-		// 对于 value ，需要保证类型对应和递归处理
-		rik := reflect.ValueOf(lik)
-		riv := rv.Type().Elem() // get the value type
-		rivk := riv.Kind()
-		switch liv.typ {
-		case LeptNull:
-			if rivk != reflect.Interface {
-				return fmt.Errorf("toMap value typ is LeptNull, rivk is %v", rivk)
-			}
-			rv.SetMapIndex(rik, reflect.Zero(riv))
-		case LeptFalse:
-			if rivk != reflect.Bool {
-				return fmt.Errorf("toMap value typ is LeptFalse, rivk is %v", rivk)
-			}
-			rv.SetMapIndex(rik, reflect.ValueOf(false))
-		case LeptTrue:
-			if rivk != reflect.Bool {
-				return fmt.Errorf("toMap value typ is LeptTrue, rivk is %v", rivk)
-			}
-			rv.SetMapIndex(rik, reflect.ValueOf(true))
-		case LeptNumber:
-			switch rivk {
-			case reflect.Int:
-				rivv := reflect.ValueOf(int(liv.n))
-				rv.SetMapIndex(rik, rivv)
-			case reflect.Int8:
-				rivv := reflect.ValueOf(int8(liv.n))
-				rv.SetMapIndex(rik, rivv)
-			case reflect.Int16:
-				rivv := reflect.ValueOf(int16(liv.n))
-				rv.SetMapIndex(rik, rivv)
-			case reflect.Int32:
-				rivv := reflect.ValueOf(int32(liv.n))
-				rv.SetMapIndex(rik, rivv)
-			case reflect.Int64:
-				rivv := reflect.ValueOf(int64(liv.n))
-				rv.SetMapIndex(rik, rivv)
-			case reflect.Uint:
-				rivv := reflect.ValueOf(uint(liv.n))
-				rv.SetMapIndex(rik, rivv)
-			case reflect.Uint8:
-				rivv := reflect.ValueOf(uint8(liv.n))
-				rv.SetMapIndex(rik, rivv)
-			case reflect.Uint16:
-				rivv := reflect.ValueOf(uint16(liv.n))
-				rv.SetMapIndex(rik, rivv)
-			case reflect.Uint32:
-				rivv := reflect.ValueOf(uint32(liv.n))
-				rv.SetMapIndex(rik, rivv)
-			case reflect.Uint64:
-				rivv := reflect.ValueOf(uint64(liv.n))
-				rv.SetMapIndex(rik, rivv)
-			case reflect.Float32:
-				rivv := reflect.ValueOf(float32(liv.n))
-				rv.SetMapIndex(rik, rivv)
-			case reflect.Float64:
-				rivv := reflect.ValueOf(float64(liv.n))
-				rv.SetMapIndex(rik, rivv)
-			case reflect.Interface:
-				rivv := reflect.ValueOf(float64(liv.n))
-				rv.SetMapIndex(rik, rivv)
-			default:
-				return fmt.Errorf("toMap value typ is LeptNumber, rivk is %v", rivk)
-			}
-			// if rivk == reflect.Int || rivk == reflect.Int8 || rivk == reflect.Int16 || rivk == reflect.Int32 || rivk == reflect.Int64 {
-			// } else if rivk == reflect.Uint || rivk == reflect.Uint8 || rivk == reflect.Uint16 || rivk == reflect.Uint32 || rivk == reflect.Uint64 {
-			// 	rivv := reflect.New(riv)
-			// 	rivv.SetUint(uint64(liv.n))
-			// 	rvv.SetMapIndex(rik, rivv)
-			// } else if rivk == reflect.Float32 || rivk == reflect.Float64 {
-			// 	rivv := reflect.New(riv)
-			// 	rivv.SetFloat(float64(liv.n))
-			// 	rvv.SetMapIndex(rik, rivv)
-			// } else {
-			// 	return fmt.Errorf("toMap value typ is LeptNumber, rivk is %v", rivk)
-			// }
-		case LeptString:
-			if rivk != reflect.String {
-				return fmt.Errorf("toMap value typ is LeptString, rivk is %v", rivk)
-			}
-			rv.SetMapIndex(rik, reflect.ValueOf(liv.s))
-		case LeptArray:
-			if rivk != reflect.Array && rivk != reflect.Slice {
-				return fmt.Errorf("toMap value typ is LeptArray, rivk is %v", rivk)
-			}
-			rivv := reflect.New(riv)
-			if err := toSlice(liv, rivv); err != nil {
-				return err
-			}
-			rv.SetMapIndex(rik, rivv)
-		case LeptObject:
-			if rivk == reflect.Struct {
-				rivv := reflect.New(riv)
-				if err := toStruct(liv, rivv); err != nil {
-					return err
-				}
-				rv.SetMapIndex(rik, rivv)
-			} else if rivk == reflect.Map {
-				rivv := reflect.New(riv)
-				if err := toMap(liv, rivv); err != nil {
-					return err
-				}
-				rv.SetMapIndex(rik, rivv)
-			} else {
-				return fmt.Errorf("toMap value typ is LeptObject, rivk is %v", rivk)
-			}
+		// 对于 key, value ，需要保证类型对应和递归处理
+		// rikt := reflect.ValueOf(lik)
+		// rivt := rv.Type().Elem() // get the value type
+		// rivv := reflect.Zero(rivt)
+		// if err := toValue(liv, rivv); err != nil {
+		// 	return err
+		// }
+		// rv.SetMapIndex(rikt, rivv)
+		// rikt := rv.Type().Key()
+		// rikv := reflect.New(rikt).Elem()
+		// rikv.Set(reflect.ValueOf(lik))
+		rikv := reflect.ValueOf(lik)
+		// 这里的 key 应该是 []byte
+		// value of type []uint8 cannot be converted to type int
+		// rikv := reflect.ValueOf([]byte(lik)).Convert(rv.Type().Key())
+		// rikv := reflect.ValueOf(bytes.NewBufferString(lik).Bytes()).Convert(rv.Type().Key())
+		rivt := rv.Type().Elem() // get the value type
+		// 很可能对应的 elemType 并没有值，只是 Zero nil
+		// rivp := reflect.New(rivt)
+		// 可以考虑生成一个 Pointer，但是这部分的逻辑应该放在
+		// toValue 中解决， toValue 中应该处理 Kind() ptr
+		// elemType := v.Type().Elem()
+		// 		if !mapElem.IsValid() {
+		// 			mapElem = reflect.New(elemType).Elem()
+		// 		} else {
+		// 			mapElem.Set(reflect.Zero(elemType))
+		// 		}
+		var rivv reflect.Value
+		// rivv.Set(reflect.Zero(rivt))
+		rivv = reflect.New(rivt).Elem()
+		if err := toValue(liv, rivv); err != nil {
+			return err
 		}
+		rv.SetMapIndex(rikv, rivv)
 	}
 	return nil
 }
-
 func toSlice(v *LeptValue, rv reflect.Value) error {
+	if !rv.IsValid() {
+		return fmt.Errorf("v is not valid")
+	}
+	decodingNull := v != nil && v.typ == LeptNull
+	u, pv := indirect(rv, decodingNull)
+	if u != nil {
+		err := u.UnmarshalJSON(v, pv)
+		return err
+	}
+	rv = pv
 	size := rv.Len()
 	vsize := 0
 	if v == nil {
-		rv.SetLen(0)
 		size = 0
 	} else if v.typ != LeptArray {
 		return fmt.Errorf("v LeptValue is not a array: %v", v.typ)
@@ -1659,9 +1623,9 @@ func toSlice(v *LeptValue, rv reflect.Value) error {
 	// 这里或许应该以 v 为标准，因为传入的 rv 可能为 cap=0 的 slice
 	for i := 0; i < size; i++ {
 		if v == nil {
-			if err := toValue(v, rv.Index(i)); err != nil {
-				return err
-			}
+			// if err := toValue(v, rv.Index(i)); err != nil {
+			// 	return err
+			// }
 		} else if v.typ != LeptArray {
 			return fmt.Errorf("v LeptValue is not a array: %v", v.typ)
 		} else {

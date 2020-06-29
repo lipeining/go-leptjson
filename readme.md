@@ -68,6 +68,40 @@ input := " { " +
 	i := ToInterface(v)
 ```
 
+```go
+package main
+import (
+  "reflect"
+  "github.com/lipeining/goleptjson"
+)
+type SubStruct struct {
+		T *bool
+		A []int          `json:"A"`
+		O map[string]int `json:"O"`
+}
+// UnmarshalJSON implements custom callback function to reflect into rv
+func (obj *SubStruct) UnmarshalJSON(v *goleptjson.LeptValue, rv reflect.Value) error {
+  // just do nothing
+  // return nil
+  // v.typ == LeptObject
+  // rv.Kind() == reflect.Struct
+  tValue := goleptjson.LeptGetObjectValue(v, "T")
+  *obj.T = tValue.typ == goleptjson.LeptTrue
+  aValue := goleptjson.LeptGetObjectValue(v, "A")
+  for i:=0;i <len(aValue.a);i++ {
+    obj.A = append(obj.A, int(goleptjson.LeptGetNumber(goleptjson.LeptGetArrayElement(v, i))))
+  }
+  obj.O = make(map[string]int)
+  oValue := goleptjson.LeptGetObjectValue(v, "O")
+  for i:=0;i<len(oValue.o);i++ {
+    key := oValue.o[i].key
+    value := oValue.o[i].value
+    obj.O[key] = int(goleptjson.LeptGetNumber(value))
+  }
+  return nil
+}
+
+```
 
 ### test
 ```sh
@@ -312,6 +346,28 @@ func leptEncodeUTF8(u uint64) []byte {
 	}
 	return buf[:write-1]
 }
+// encoding/json/decode.go
+
+b := make([]byte, len(s)+2*utf8.UTFMax)
+  1045				case 'u':
+  1046					r--
+  1047					rr := getu4(s[r:])
+  1048					if rr < 0 {
+  1049						return
+  1050					}
+  1051					r += 6
+  1052					if utf16.IsSurrogate(rr) {
+  1053						rr1 := getu4(s[r:])
+  1054						if dec := utf16.DecodeRune(rr, rr1); dec != unicode.ReplacementChar {
+  1055							// A valid pair; consume.
+  1056							r += 6
+  1057							w += utf8.EncodeRune(b[w:], dec)
+  1058							break
+  1059						}
+  1060						// Invalid surrogate; fall back to replacement rune.
+  1061						rr = unicode.ReplacementChar
+  1062					}
+  1063					w += utf8.EncodeRune(b[w:], rr)
 ```
 所以对于 u，针对每一个区间计算出对应的 uint64，再使用 leptEncodeUTF8 得到可以写入 buffer 的 []byte 数组
 buffer.String() 可以得到完整的 utf8 解码字符串
@@ -352,6 +408,19 @@ interface{} 的层次结构体。需要用户自行使用 .(string) .([]string) 
 ### struct
 在对应的基础上，可以使用 []struct{} struct{} 实现 encoding/json 中的
 方法，将 json 字符串映射到 struct 中。
+```sh
+panic: reflect: reflect.flag.mustBeAssignable using value obtained using unexported field [recovered]
+```
+对于定义的解构 obj 无法反射回  unexported field 即
+```go
+  type sub {
+    t *bool
+		T *bool
+		a *[]int
+		o *map[string]int
+  }
+```
+
 ```go
 func ToStruct(v *LeptValue, structure interface{}) error {
 }
@@ -395,6 +464,24 @@ if rv.IsNil() {
 }
 ```
 
+反射为 struct 时，只能使用 string 作为 map[string]Type
+```go
+  // Check type of target: struct or map[string]T
+  switch v.Kind() {
+  case reflect.Map:
+  	// map must have string kind
+  	t := v.Type()
+  	if t.Key().Kind() != reflect.String {
+  		d.saveError(&UnmarshalTypeError{"object", v.Type(), int64(d.off)})
+  		d.off--
+  		d.next() // skip over { } in input
+  		return
+  	}
+  	if v.IsNil() {
+  		v.Set(reflect.MakeMap(t))
+  	}
+```
+
 ### struct tag
 todo 实现 struct.tag 的方法，包括 omitempty,omit name 等操作。
 
@@ -403,6 +490,13 @@ todo 实现 struct.field. ptr 的结构体解析
 当前的反射中没有处理 reflect.Ptr reflect.Interface reflect.Chan reflect.Func 的情况，是否需要考虑
 主要是 reflect.Ptr 的问题。
 下面列举 reflect 包的处理方式，需要取得 x.Elem() 得到 Type() 进行 Setxxx()
+这里需要借鉴 encoding/json/decode.go 里面的 indirect 方法，不断地迭代
+ptr 类型， 将对应的值进行初始化为指针。
+```go
+if v.IsNil() {
+  v.Set(reflect.New(v.Type().Elem()))
+}
+```
 ```go
 if v.IsNil() {
   v.Set(reflect.New(v.Type().Elem()))
