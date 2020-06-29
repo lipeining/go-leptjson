@@ -68,6 +68,40 @@ input := " { " +
 	i := ToInterface(v)
 ```
 
+```go
+package main
+import (
+  "reflect"
+  "github.com/lipeining/goleptjson"
+)
+type SubStruct struct {
+		T *bool
+		A []int          `json:"A"`
+		O map[string]int `json:"O"`
+}
+// UnmarshalJSON implements custom callback function to reflect into rv
+func (obj *SubStruct) UnmarshalJSON(v *goleptjson.LeptValue, rv reflect.Value) error {
+  // just do nothing
+  // return nil
+  // v.typ == LeptObject
+  // rv.Kind() == reflect.Struct
+  tValue := goleptjson.LeptGetObjectValue(v, "T")
+  *obj.T = tValue.typ == goleptjson.LeptTrue
+  aValue := goleptjson.LeptGetObjectValue(v, "A")
+  for i:=0;i <len(aValue.a);i++ {
+    obj.A = append(obj.A, int(goleptjson.LeptGetNumber(goleptjson.LeptGetArrayElement(v, i))))
+  }
+  obj.O = make(map[string]int)
+  oValue := goleptjson.LeptGetObjectValue(v, "O")
+  for i:=0;i<len(oValue.o);i++ {
+    key := oValue.o[i].key
+    value := oValue.o[i].value
+    obj.O[key] = int(goleptjson.LeptGetNumber(value))
+  }
+  return nil
+}
+
+```
 
 ### test
 ```sh

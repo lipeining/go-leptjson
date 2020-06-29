@@ -2,9 +2,7 @@ package goleptjson
 
 import (
 	"bytes"
-	"encoding"
 	"encoding/binary"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -1319,64 +1317,20 @@ func ToStruct(v *LeptValue, structure interface{}) error {
 	// return fmt.Errorf("structure value is not a ptr of slice or struct")
 }
 
-// 可以学习 encoding/json/decode.go
-// 添加一个 indirect 方法，在里面进行不断地递归
-// 321	// indirect walks down v allocating pointers as needed,
-// 322	// until it gets to a non-pointer.
-// 323	// if it encounters an Unmarshaler, indirect stops and returns that.
-// 324	// if decodingNull is true, indirect stops at the last pointer so it can be set to nil.
-// 325	func (d *decodeState) indirect(v reflect.Value, decodingNull bool) (Unmarshaler, encoding.TextUnmarshaler, reflect.Value) {
-// 326		// If v is a named type and is addressable,
-// 327		// start with its address, so that if the type has pointer methods,
-// 328		// we find them.
-// 329		if v.Kind() != reflect.Ptr && v.Type().Name() != "" && v.CanAddr() {
-// 330			v = v.Addr()
-// 331		}
-// 332		for {
-// 333			// Load value from interface, but only if the result will be
-// 334			// usefully addressable.
-// 335			if v.Kind() == reflect.Interface && !v.IsNil() {
-// 336				e := v.Elem()
-// 337				if e.Kind() == reflect.Ptr && !e.IsNil() && (!decodingNull || e.Elem().Kind() == reflect.Ptr) {
-// 338					v = e
-// 339					continue
-// 340				}
-// 341			}
-// 342
-// 343			if v.Kind() != reflect.Ptr {
-// 344				break
-// 345			}
-// 346
-// 347			if v.Elem().Kind() != reflect.Ptr && decodingNull && v.CanSet() {
-// 348				break
-// 349			}
-// 350			if v.IsNil() {
-// 351				v.Set(reflect.New(v.Type().Elem()))
-// 352			}
-// 353			if v.Type().NumMethod() > 0 {
-// 354				if u, ok := v.Interface().(Unmarshaler); ok {
-// 355					return u, nil, reflect.Value{}
-// 356				}
-// 357				if u, ok := v.Interface().(encoding.TextUnmarshaler); ok {
-// 358					return nil, u, reflect.Value{}
-// 359				}
-// 360			}
-// 361			v = v.Elem()
-// 362		}
-// 363		return nil, nil, v
-// 364	}
-
 // Unmarshaler 导出的解析 json 的方法体
 type Unmarshaler interface {
 	// UnmarshalJSON get v and rv to set rv of
 	UnmarshalJSON(v *LeptValue, rv reflect.Value) error
 }
 
+// 可以学习 encoding/json/decode.go
+// 添加一个 indirect 方法，在里面进行不断地递归
+
 // indirect walks down v allocating pointers as needed,
 // until it gets to a non-pointer.
 // if it encounters an Unmarshaler, indirect stops and returns that.
 // if decodingNull is true, indirect stops at the last pointer so it can be set to nil.
-func indirect(v reflect.Value, decodingNull bool) (json.Unmarshaler, encoding.TextUnmarshaler, reflect.Value) {
+func indirect(v reflect.Value, decodingNull bool) (Unmarshaler, reflect.Value) {
 	// If v is a named type and is addressable,
 	// start with its address, so that if the type has pointer methods,
 	// we find them.
@@ -1404,16 +1358,13 @@ func indirect(v reflect.Value, decodingNull bool) (json.Unmarshaler, encoding.Te
 			v.Set(reflect.New(v.Type().Elem()))
 		}
 		if v.Type().NumMethod() > 0 {
-			if u, ok := v.Interface().(json.Unmarshaler); ok {
-				return u, nil, reflect.Value{}
-			}
-			if u, ok := v.Interface().(encoding.TextUnmarshaler); ok {
-				return nil, u, reflect.Value{}
+			if u, ok := v.Interface().(Unmarshaler); ok {
+				return u, reflect.Value{}
 			}
 		}
 		v = v.Elem()
 	}
-	return nil, nil, v
+	return nil, v
 }
 func toValue(v *LeptValue, rv reflect.Value) error {
 	// if rv.Kind() == reflect.Ptr {
@@ -1424,20 +1375,10 @@ func toValue(v *LeptValue, rv reflect.Value) error {
 	}
 	// 针对自定义类型，需要判断是否有 UnmarshalJSON 方法
 	decodingNull := v != nil && v.typ == LeptNull
-	u, ut, pv := indirect(rv, decodingNull)
+	u, pv := indirect(rv, decodingNull)
 	if u != nil {
-		err := u.UnmarshalJSON([]byte(""))
-		if err != nil {
-			return err
-		}
-		return nil
-	}
-	if ut != nil {
-		err := ut.UnmarshalText([]byte(""))
-		if err != nil {
-			return err
-		}
-		return nil
+		err := u.UnmarshalJSON(v, pv)
+		return err
 	}
 	rv = pv
 	if rv.Kind() == reflect.Array || rv.Kind() == reflect.Slice {
@@ -1452,11 +1393,11 @@ func toValue(v *LeptValue, rv reflect.Value) error {
 	// 可以传入自定义的 LeptEvent 对应的 Kind 还是包含在基本的 Kind 枚举中
 	switch rv.Kind() {
 	case reflect.Ptr:
-		// 不会出现这种情况
+		// 对应的 v 为 LeptNull 时， decodingNull = true
 		fmt.Println("toValue got reflect.Ptr of v ", v)
 	case reflect.Interface:
 		// 可能对应的 rv 为 []interface{} interface{}
-		fmt.Println("toValue got reflect.Interface of v ", v, rv)
+		// fmt.Println("toValue got reflect.Interface of v ", v, rv)
 		if v == nil {
 			rv.Set(reflect.Zero(rv.Type()))
 		} else if rv.NumMethod() != 0 {
@@ -1547,20 +1488,10 @@ func toStruct(v *LeptValue, rv reflect.Value) error {
 		return fmt.Errorf("v is not valid")
 	}
 	decodingNull := v != nil && v.typ == LeptNull
-	u, ut, pv := indirect(rv, decodingNull)
+	u, pv := indirect(rv, decodingNull)
 	if u != nil {
-		err := u.UnmarshalJSON([]byte(""))
-		if err != nil {
-			return err
-		}
-		return nil
-	}
-	if ut != nil {
-		err := ut.UnmarshalText([]byte(""))
-		if err != nil {
-			return err
-		}
-		return nil
+		err := u.UnmarshalJSON(v, pv)
+		return err
 	}
 	rv = pv
 	size := rv.NumField()
@@ -1589,20 +1520,10 @@ func toMap(v *LeptValue, rv reflect.Value) error {
 		return fmt.Errorf("v is not valid")
 	}
 	decodingNull := v != nil && v.typ == LeptNull
-	u, ut, pv := indirect(rv, decodingNull)
+	u, pv := indirect(rv, decodingNull)
 	if u != nil {
-		err := u.UnmarshalJSON([]byte(""))
-		if err != nil {
-			return err
-		}
-		return nil
-	}
-	if ut != nil {
-		err := ut.UnmarshalText([]byte(""))
-		if err != nil {
-			return err
-		}
-		return nil
+		err := u.UnmarshalJSON(v, pv)
+		return err
 	}
 	rv = pv
 	vsize := 0
@@ -1668,20 +1589,10 @@ func toSlice(v *LeptValue, rv reflect.Value) error {
 		return fmt.Errorf("v is not valid")
 	}
 	decodingNull := v != nil && v.typ == LeptNull
-	u, ut, pv := indirect(rv, decodingNull)
+	u, pv := indirect(rv, decodingNull)
 	if u != nil {
-		err := u.UnmarshalJSON([]byte(""))
-		if err != nil {
-			return err
-		}
-		return nil
-	}
-	if ut != nil {
-		err := ut.UnmarshalText([]byte(""))
-		if err != nil {
-			return err
-		}
-		return nil
+		err := u.UnmarshalJSON(v, pv)
+		return err
 	}
 	rv = pv
 	size := rv.Len()

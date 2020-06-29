@@ -939,8 +939,10 @@ func TestToStruct(t *testing.T) {
 
 		E LeptEvent
 		// subs []*SubStruct
+		// Subs []*SubStruct
 		Subs []SubStruct
 		// sub  *SubStruct
+		// Sub *SubStruct
 		Sub SubStruct
 
 		IO interface{} `json:"IO"`
