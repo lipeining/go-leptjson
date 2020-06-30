@@ -16,13 +16,13 @@ func ToStruct(v *LeptValue, structure interface{}) error
 ```
 ```go
 	input := " { " +
-		"\"N\" : null , " +
-		"\"F\" : false , " +
-		"\"T\" : true , " +
-		"\"I\" : 123 , " +
-		"\"S\" : \"abc\", " +
-		"\"A\" : [ 1, 2, 3 ]," +
-		"\"O\" : { \"1\" : 1, \"2\" : 2, \"3\" : 3 }" +
+		"\"n\" : null , " +
+		"\"f\" : false , " +
+		"\"t\" : true , " +
+		"\"i\" : 123 , " +
+		"\"s\" : \"abc\", " +
+		"\"a\" : [ 1, 2, 3 ]," +
+		"\"o\" : { \"1\" : 1, \"2\" : 2, \"3\" : 3 }" +
 		" } "
 	v := NewLeptValue()
 	expectEQLeptEvent(t, LeptParseOK, LeptParse(v, input))
@@ -108,9 +108,9 @@ func (obj *SubStruct) UnmarshalJSON(v *goleptjson.LeptValue, rv reflect.Value) e
 go test -coverprofile="c.out"
 go tool cover -html="c.out"
 ```
-可以补充关于错误输入的测试，
+可以补充关于错误输入的测试，针对 cover 中未测试到的 panic 语句
 struct, map, array, slice 结构体的测试。
-todo 添加 nativejson-benchmark 对应的 json-checker[http://json.org/JSON_checker/]
+添加 nativejson-benchmark 对应的 json-checker[http://json.org/JSON_checker/]
 和其他测试数据。
 
 ### benchmark
@@ -147,6 +147,12 @@ BenchmarkTwitterJSON-4   	     135	   8158259 ns/op	 3780694 B/op	   71226 alloc
 PASS
 ok  	github.com/lipeining/goleptjson	2.197s
 ```
+### todo
+1.提供 Unmarshal Marshal 接口
+2.实现 map[int]int 等 key 非 string 的解析
+3.提供 utf8, utf16 的编码
+4.嵌套 struct，匿名 struct 解析
+
 
 ### go doc
 生成 go doc 文档
@@ -217,6 +223,8 @@ type LeptValue struct{ ... }
 leptjson 使用 int 作为解析错误的返回值，
 goleptjson 不适用 error 作为错误返回，
 定义了相对于 leptjson 的 LeptEvent 表示func LeptParse(string) LeptEvent 的返回值。
+可以合并 LeptParse 和 ToStruct 方法，得到 error 的返回值，
+调整接口的返回值
 
 ### number
 ```md
