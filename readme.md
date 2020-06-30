@@ -433,6 +433,7 @@ func ToStruct(v *LeptValue, structure interface{}) error {
 ```
 映射为 struct 时，以传入的 struct 为参考，如果 v 的类型或者值不对应的话，会返回错误。
 对于初始化的值，不知道是否有默认值，现时，struct 的全部字段都会设置默认值。
+todo 嵌套，匿名字段没有进行处理
 ```go
 {<nil> false true 123 abc [] map[]}
 ```
@@ -488,6 +489,8 @@ if rv.IsNil() {
 
 ### struct tag
 todo 实现 struct.tag 的方法，包括 omitempty,omit name 等操作。
+在 reflect.Value.Field(i) 得到 StructField 对象
+得到 StructTag 对象可以解析 tag 字符串，
 
 ### ptr
 todo 实现 struct.field. ptr 的结构体解析

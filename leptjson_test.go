@@ -893,10 +893,10 @@ func TestToStruct(t *testing.T) {
 		subStr +
 		" ] "
 	input := " { " +
-		"\"NP\" : null , " +
-		"\"FP\" : false , " +
-		"\"FPP\" : false , " +
-		"\"TPP\" : true , " +
+		"\"np\" : null , " +
+		"\"fp\" : false , " +
+		"\"fpp\" : false , " +
+		"\"tpp\" : true , " +
 		"\"E\" : 4.1, " +
 		"\"Subs\" : " + subsStr + ", " +
 		"\"Sub\" : " + subStr + ", " +
@@ -923,7 +923,7 @@ func TestToStruct(t *testing.T) {
 	// fmt.Println(ToInterface(v))
 	// fmt.Println(ToMap(v))
 	type SubStruct struct {
-		T *bool
+		T *bool          `json:"T"`
 		A []int          `json:"A"`
 		O map[string]int `json:"O"`
 	}
@@ -937,13 +937,13 @@ func TestToStruct(t *testing.T) {
 		// a *[]int          `json:"a"`
 		// o *map[string]int `json:"o"`
 
-		E LeptEvent
-		// subs []*SubStruct
-		// Subs []*SubStruct
-		Subs []SubStruct
-		// sub  *SubStruct
-		// Sub *SubStruct
-		Sub SubStruct
+		E LeptEvent `json:"E,omitempty"`
+		// subs []*SubStruct `json:"subs"`
+		// Subs []*SubStruct `json:"Subs"`
+		Subs []SubStruct `json:"Subs"`
+		// sub  *SubStruct   `json:"sub"`
+		// Sub *SubStruct    `json:"Sub"`
+		Sub SubStruct `json:"Sub"`
 
 		IO interface{} `json:"IO"`
 

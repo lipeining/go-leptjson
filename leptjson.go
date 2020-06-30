@@ -8,6 +8,7 @@ import (
 	"math"
 	"reflect"
 	"strconv"
+	"strings"
 	"unicode"
 	"unicode/utf16"
 	"unicode/utf8"
@@ -1528,6 +1529,12 @@ func toValue(v *LeptValue, rv reflect.Value) error {
 	// fmt.Println(rv)
 	return nil
 }
+func parseTag(tag string) (string, string) {
+	if idx := strings.Index(tag, ","); idx != -1 {
+		return tag[:idx], tag[idx+1:]
+	}
+	return tag, ""
+}
 func toStruct(v *LeptValue, rv reflect.Value) error {
 	if !rv.IsValid() {
 		return fmt.Errorf("v is not valid")
@@ -1544,7 +1551,20 @@ func toStruct(v *LeptValue, rv reflect.Value) error {
 	// 这里没有考虑到 嵌套匿名字段 的处理
 	for i := 0; i < size; i++ {
 		fit := rt.Field(i)
-		fiName := fit.Name
+		// fmt.Println(fit.Tag)
+		tag := fit.Tag.Get("json")
+		if tag == "-" {
+			continue
+		}
+		name, opts := parseTag(tag)
+		fiName := name
+		// 只有 encode 的时候， omitempty 是起作用的
+		if strings.Index(opts, "omitempty") != -1 {
+			fmt.Println(tag, opts)
+		}
+		// fmt.Println()
+		// fmt.Println(fit.Tag.Get("omitempty"))
+		// fiName := fit.Name
 		if v == nil {
 			// if err := toValue(v, rv.Field(i)); err != nil {
 			// 	return err
