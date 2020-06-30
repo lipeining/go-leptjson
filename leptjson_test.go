@@ -947,6 +947,9 @@ func TestToStruct(t *testing.T) {
 
 		IO interface{} `json:"IO"`
 
+		C    chan struct{}
+		Func func(input string) error
+
 		N interface{}    `json:"N"`
 		F bool           `json:"F"`
 		T bool           `json:"T"`

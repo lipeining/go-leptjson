@@ -8,6 +8,9 @@ import (
 	"math"
 	"reflect"
 	"strconv"
+	"unicode"
+	"unicode/utf16"
+	"unicode/utf8"
 )
 
 var (
@@ -555,52 +558,83 @@ func LeptParseStringRaw(c *LeptContext) (string, LeptEvent) {
 				stack.WriteString("\t")
 			case '/':
 				stack.WriteString("/")
+			// case 'u':
+			// 	u, err := leptParseHex4(c.json[i+2:])
+			// 	if err != nil {
+			// 		return "", LeptParseInvalidUnicodeHex
+			// 	}
+			// 	if u < 0 || u > 0x10FFFF {
+			// 		return "", LeptParseInvalidUnicodeHex
+			// 	}
+			// 	if u >= 0xD800 && u <= 0xDBFF { /* surrogate pair */
+			// 		if i+6 >= n || c.json[i+6] != '\\' {
+			// 			return "", LeptParseInvalidUnicodeSurrogate
+			// 		}
+			// 		if i+7 >= n || c.json[i+7] != 'u' {
+			// 			return "", LeptParseInvalidUnicodeSurrogate
+			// 		}
+			// 		u2, err := leptParseHex4(c.json[i+8:])
+			// 		if err != nil {
+			// 			return "", LeptParseInvalidUnicodeHex
+			// 		}
+			// 		if u2 < 0xDC00 || u2 > 0xDFFF {
+			// 			return "", LeptParseInvalidUnicodeSurrogate
+			// 		}
+			// 		u = (((u - 0xD800) << 10) | (u2 - 0xDC00)) + 0x10000
+			// 		i += 6
+			// 	}
+			// 	检查代理对
+			// 	stack.WriteString(leptEncodeUTF8(u))
+			// 	if u <= 0x7F {
+			// 		stack.Write(leptEncodeUTF8(u & 0xFF))
+			// 	} else if u <= 0x7FF {
+			// 		stack.Write(leptEncodeUTF8(0xC0 | ((u >> 6) & 0xFF)))
+			// 		stack.Write(leptEncodeUTF8(0x80 | (u & 0x3F)))
+			// 	} else if u <= 0xFFFF {
+			// 		stack.Write(leptEncodeUTF8(0xE0 | ((u >> 12) & 0xFF)))
+			// 		stack.Write(leptEncodeUTF8(0x80 | ((u >> 6) & 0x3F)))
+			// 		stack.Write(leptEncodeUTF8(0x80 | (u & 0x3F)))
+			// 	} else if u <= 0x10FFFF {
+			// 		stack.Write(leptEncodeUTF8(0xF0 | ((u >> 18) & 0xFF)))
+			// 		stack.Write(leptEncodeUTF8(0x80 | ((u >> 12) & 0x3F)))
+			// 		stack.Write(leptEncodeUTF8(0x80 | ((u >> 6) & 0x3F)))
+			// 		stack.Write(leptEncodeUTF8(0x80 | (u & 0x3F)))
+			// 	} else {
+			// 		panic("u is illegal")
+			// 	}
+			// 	// 将 uxxxx 跳过
+			// 	// \\ 最后是有 i++ 这里只需要 4
+			// 	i += 4
 			case 'u':
-				u, err := leptParseHex4(c.json[i+2:])
-				if err != nil {
+				rr := getu4(c.json[i+2:])
+				if rr < 0 {
 					return "", LeptParseInvalidUnicodeHex
 				}
-				if u < 0 || u > 0x10FFFF {
-					return "", LeptParseInvalidUnicodeHex
-				}
-				if u >= 0xD800 && u <= 0xDBFF { /* surrogate pair */
+				if utf16.IsSurrogate(rr) {
 					if i+6 >= n || c.json[i+6] != '\\' {
 						return "", LeptParseInvalidUnicodeSurrogate
 					}
 					if i+7 >= n || c.json[i+7] != 'u' {
 						return "", LeptParseInvalidUnicodeSurrogate
 					}
-					u2, err := leptParseHex4(c.json[i+8:])
-					if err != nil {
-						return "", LeptParseInvalidUnicodeHex
-					}
-					if u2 < 0xDC00 || u2 > 0xDFFF {
+					rr1 := getu4(c.json[i+8:])
+					if rr1 < 0xDC00 || rr1 > 0xDFFF {
 						return "", LeptParseInvalidUnicodeSurrogate
 					}
-					u = (((u - 0xD800) << 10) | (u2 - 0xDC00)) + 0x10000
-					i += 6
+					if dec := utf16.DecodeRune(rr, rr1); dec != unicode.ReplacementChar {
+						bits := make([]byte, 8)
+						w := utf8.EncodeRune(bits, dec)
+						stack.Write(bits[:w])
+						i += 10
+						// 这里的 break 是跳出 最近一层的 switch 所以需要加上下面的 i += 4
+						break
+					}
+					// Invalid surrogate; fall back to replacement rune.
+					rr = unicode.ReplacementChar
 				}
-				// 检查代理对
-				// stack.WriteString(leptEncodeUTF8(u))
-				if u <= 0x7F {
-					stack.Write(leptEncodeUTF8(u & 0xFF))
-				} else if u <= 0x7FF {
-					stack.Write(leptEncodeUTF8(0xC0 | ((u >> 6) & 0xFF)))
-					stack.Write(leptEncodeUTF8(0x80 | (u & 0x3F)))
-				} else if u <= 0xFFFF {
-					stack.Write(leptEncodeUTF8(0xE0 | ((u >> 12) & 0xFF)))
-					stack.Write(leptEncodeUTF8(0x80 | ((u >> 6) & 0x3F)))
-					stack.Write(leptEncodeUTF8(0x80 | (u & 0x3F)))
-				} else if u <= 0x10FFFF {
-					stack.Write(leptEncodeUTF8(0xF0 | ((u >> 18) & 0xFF)))
-					stack.Write(leptEncodeUTF8(0x80 | ((u >> 12) & 0x3F)))
-					stack.Write(leptEncodeUTF8(0x80 | ((u >> 6) & 0x3F)))
-					stack.Write(leptEncodeUTF8(0x80 | (u & 0x3F)))
-				} else {
-					panic("u is illegal")
-				}
-				// 将 uxxxx 跳过
-				// \\ 最后是有 i++ 这里只需要 4
+				bits := make([]byte, 8)
+				w := utf8.EncodeRune(bits, rr)
+				stack.Write(bits[:w])
 				i += 4
 			default:
 				return "", LeptParseInvalidStringEscape
@@ -642,6 +676,17 @@ func leptParseHex4(input string) (uint64, error) {
 		return 0, errors.New("illegal hex string")
 	}
 	return u, nil
+}
+func getu4(input string) rune {
+	n := len(input)
+	if n < 4 {
+		return -1
+	}
+	u, err := strconv.ParseUint(input[:4], 16, 64)
+	if err != nil {
+		return -1
+	}
+	return rune(u)
 }
 
 // LeptParseValue use to parse value switch to spec func
