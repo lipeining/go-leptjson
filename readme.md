@@ -372,6 +372,10 @@ b := make([]byte, len(s)+2*utf8.UTFMax)
 所以对于 u，针对每一个区间计算出对应的 uint64，再使用 leptEncodeUTF8 得到可以写入 buffer 的 []byte 数组
 buffer.String() 可以得到完整的 utf8 解码字符串
 
+使用 unicode, unicode/utf8, unicode/utf16 包可以解析 utf8 字符串，通用 rune 类型。
+在 decode.go 中，会提前初始化一个 b []byte 数组，用于存储解析的字符串，不断计算写入 b 的 w 长度，
+
+
 ### array
 ```md
 array = %x5B ws [ value *( ws %x2C ws value ) ] ws %x5D
