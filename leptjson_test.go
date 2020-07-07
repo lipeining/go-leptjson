@@ -1138,6 +1138,8 @@ func TestMarshal(t *testing.T) {
 
 		IO interface{} `json:"IO"`
 
+		a    []string
+		c    chan struct{}
 		C    chan struct{}            `json:"-"`
 		Func func(input string) error `json:"-"`
 
@@ -1175,6 +1177,8 @@ func TestMarshal(t *testing.T) {
 
 		IO: 10,
 
+		a:    []string{"a"},
+		c:    make(chan struct{}, 0),
 		C:    make(chan struct{}, 0),
 		Func: func(input string) error { return nil },
 

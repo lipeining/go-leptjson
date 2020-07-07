@@ -71,6 +71,30 @@ const (
 	LeptParseMissCommaOrCurlyBracket
 )
 
+var eventNames = []string{
+	"LeptParseOK",
+	"LeptParseExpectValue",
+	"LeptParseInvalidValue",
+	"LeptParseRootNotSingular",
+	"LeptParseNumberTooBig",
+	"LeptParseMissQuotationMark",
+	"LeptParseInvalidStringEscape",
+	"LeptParseInvalidStringChar",
+	"LeptParseInvalidUnicodeHex",
+	"LeptParseInvalidUnicodeSurrogate",
+	"LeptParseMissCommaOrSouareBracket",
+	"LeptParseMissKey",
+	"LeptParseMissColon",
+	"LeptParseMissCommaOrCurlyBracket",
+}
+
+func (event LeptEvent) String() string {
+	if int(event) < len(eventNames) {
+		return eventNames[event]
+	}
+	return "LeptParseError"
+}
+
 // LeptKeyNotExist object key not exist
 const LeptKeyNotExist int = -1
 
@@ -93,6 +117,23 @@ const (
 	// LeptObject parse to map
 	LeptObject
 )
+
+var typeNames = []string{
+	"LeptNull",
+	"LeptFalse",
+	"LeptTrue",
+	"LeptNumber",
+	"LeptString",
+	"LeptArray",
+	"LeptObject",
+}
+
+func (t LeptType) String() string {
+	if int(t) < len(typeNames) {
+		return typeNames[t]
+	}
+	return "LeptUnkown"
+}
 
 // LeptMember use to hold a pair of key/value
 type LeptMember struct {
@@ -1794,8 +1835,8 @@ func (e *encodeState) reflectValue(v reflect.Value, allowAddr bool) {
 			} else {
 				e.reflectValue(v, false)
 			}
+			return
 		}
-		return
 	}
 
 	switch t.Kind() {
@@ -1833,6 +1874,10 @@ func (e *encodeState) reflectValue(v reflect.Value, allowAddr bool) {
 		for i := 0; i < size; i++ {
 			fit := rt.Field(i)
 			// fmt.Println(fit.Tag)
+			if fit.PkgPath != "" {
+				// unexported
+				continue
+			}
 			tag := fit.Tag.Get("json")
 			if tag == "-" {
 				continue

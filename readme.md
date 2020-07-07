@@ -2,7 +2,7 @@
 
 just a json parser learning resp!
 
-main idea and lesson comes from (miloyip/json-tutorial)[https://github.com/miloyip/json-tutorial]
+main idea and lesson comes from [miloyip/json-tutorial](https://github.com/miloyip/json-tutorial)
 
 ### usage
 总体上可以参考 leptjson_test.go
@@ -110,7 +110,7 @@ go tool cover -html="c.out"
 ```
 可以补充关于错误输入的测试，针对 cover 中未测试到的 panic 语句
 struct, map, array, slice 结构体的测试。
-添加 nativejson-benchmark 对应的 json-checker[http://json.org/JSON_checker/]
+添加 nativejson-benchmark 对应的 [json-checker](http://json.org/JSON_checker/)
 和其他测试数据。
 
 ### benchmark
