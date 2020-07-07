@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"unicode"
@@ -1707,4 +1709,221 @@ func toSlice(v *LeptValue, rv reflect.Value) error {
 }
 func setValue(rv reflect.Value) {
 	rv.SetBool(true)
+}
+
+// Unmarshal parse input data into structure
+func Unmarshal(data []byte, structure interface{}) error {
+	v := NewLeptValue()
+	event := LeptParse(v, string(data))
+	if event != LeptParseOK {
+		return fmt.Errorf("Unmarshal parse error: %v", event)
+	}
+	return ToStruct(v, structure)
+}
+
+// Marshaler is the interface implemented by objects that
+// can marshal themselves into valid JSON.
+type Marshaler interface {
+	MarshalJSON() ([]byte, error)
+}
+
+var (
+	marshalerType = reflect.TypeOf(new(Marshaler)).Elem()
+)
+
+type encodeState struct {
+	bytes.Buffer
+}
+
+// Marshal stringify the input structure
+func Marshal(structure interface{}) ([]byte, error) {
+	e := &encodeState{}
+	err := e.marshal(structure)
+	if err != nil {
+		return nil, err
+	}
+	return e.Bytes(), nil
+}
+
+func (e *encodeState) marshal(structure interface{}) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			if _, ok := r.(runtime.Error); ok {
+				panic(r)
+			}
+			if s, ok := r.(string); ok {
+				panic(s)
+			}
+			err = r.(error)
+		}
+	}()
+	e.reflectValue(reflect.ValueOf(structure), true)
+	return nil
+}
+func isEmptyValue(v reflect.Value) bool {
+	switch v.Kind() {
+	case reflect.Array, reflect.Map, reflect.Slice, reflect.String:
+		return v.Len() == 0
+	case reflect.Bool:
+		return !v.Bool()
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return v.Int() == 0
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return v.Uint() == 0
+	case reflect.Float32, reflect.Float64:
+		return v.Float() == 0
+	case reflect.Interface, reflect.Ptr:
+		return v.IsNil()
+	}
+	return false
+}
+func (e *encodeState) reflectValue(v reflect.Value, allowAddr bool) {
+	if !v.IsValid() {
+		e.WriteString("null")
+		return
+	}
+	t := v.Type()
+	if t.Implements(marshalerType) {
+		marshalerEncoder(e, v, false)
+		return
+	}
+	if t.Kind() != reflect.Ptr && allowAddr {
+		if reflect.PtrTo(t).Implements(marshalerType) {
+			if v.CanAddr() {
+				addrMarshalerEncoder(e, v, false)
+			} else {
+				e.reflectValue(v, false)
+			}
+		}
+		return
+	}
+
+	switch t.Kind() {
+	case reflect.Bool:
+		if v.Bool() {
+			e.WriteString("true")
+		} else {
+			e.WriteString("false")
+		}
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		b := strconv.AppendInt([]byte(""), v.Int(), 10)
+		e.Write(b)
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		b := strconv.AppendUint([]byte(""), v.Uint(), 10)
+		e.Write(b)
+	case reflect.Float32:
+		b := strconv.AppendFloat([]byte(""), v.Float(), 'g', -1, 32)
+		e.Write(b)
+	case reflect.Float64:
+		b := strconv.AppendFloat([]byte(""), v.Float(), 'g', -1, 64)
+		e.Write(b)
+	case reflect.String:
+		e.WriteString(leptStringifyString(v.String()))
+	case reflect.Interface:
+		if v.IsNil() {
+			e.WriteString("null")
+			return
+		}
+		e.reflectValue(v.Elem(), false)
+	case reflect.Struct:
+		e.WriteByte('{')
+		first := true
+		size := v.NumField()
+		rt := t
+		for i := 0; i < size; i++ {
+			fit := rt.Field(i)
+			// fmt.Println(fit.Tag)
+			tag := fit.Tag.Get("json")
+			if tag == "-" {
+				continue
+			}
+			name, opts := parseTag(tag)
+			// 只有 encode 的时候， omitempty 是起作用的
+			fi := v.Field(i)
+			if !fi.IsValid() || strings.Index(opts, "omitempty") != -1 && isEmptyValue(fi) {
+				continue
+			}
+			if first {
+				first = false
+			} else {
+				e.WriteByte(',')
+			}
+			e.WriteString(leptStringifyString(name))
+			e.WriteByte(':')
+			e.reflectValue(fi, true)
+		}
+		e.WriteByte('}')
+	case reflect.Map:
+		if v.IsNil() {
+			e.WriteString("null")
+			return
+		}
+		e.WriteByte('{')
+		sv := v.MapKeys()
+		sort.Slice(sv, func(i, j int) bool {
+			return sv[i].String() < sv[j].String()
+		})
+		for i, k := range sv {
+			if i > 0 {
+				e.WriteByte(',')
+			}
+			e.WriteString(leptStringifyString(k.String()))
+			e.WriteByte(':')
+			// me.elemEnc(e, v.MapIndex(k), false)
+			e.reflectValue(v.MapIndex(k), false)
+		}
+		e.WriteByte('}')
+	case reflect.Slice:
+		if v.IsNil() {
+			e.WriteString("null")
+			return
+		}
+		fallthrough
+	case reflect.Array:
+		e.WriteByte('[')
+		n := v.Len()
+		for i := 0; i < n; i++ {
+			if i > 0 {
+				e.WriteByte(',')
+			}
+			e.reflectValue(v.Index(i), false)
+		}
+		e.WriteByte(']')
+	case reflect.Ptr:
+		if v.IsNil() {
+			e.WriteString("null")
+			return
+		}
+		e.reflectValue(v.Elem(), false)
+	default:
+		fmt.Println(v, t, t.Kind())
+		panic("marshal unsupport type")
+	}
+}
+
+func marshalerEncoder(e *encodeState, v reflect.Value, quoted bool) {
+	if v.Kind() == reflect.Ptr && v.IsNil() {
+		e.WriteString("null")
+		return
+	}
+	m := v.Interface().(Marshaler)
+	b, err := m.MarshalJSON()
+	if err != nil {
+		panic(err)
+	}
+	e.Write(b)
+}
+
+func addrMarshalerEncoder(e *encodeState, v reflect.Value, quoted bool) {
+	va := v.Addr()
+	if va.IsNil() {
+		e.WriteString("null")
+		return
+	}
+	m := va.Interface().(Marshaler)
+	b, err := m.MarshalJSON()
+	if err != nil {
+		panic(err)
+	}
+	e.Write(b)
 }

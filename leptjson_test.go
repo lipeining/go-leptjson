@@ -1112,6 +1112,91 @@ func TestSetValue(t *testing.T) {
 	setValue(rv.Field(0))
 	fmt.Println("TestSetValue", rv)
 }
+func TestMarshal(t *testing.T) {
+	type SubStruct struct {
+		T *bool          `json:"T"`
+		A []int          `json:"A"`
+		O map[string]int `json:"O"`
+	}
+	type obj struct {
+		NP  *interface{} `json:"np"`
+		FP  *bool        `json:"fp"`
+		FPP **bool       `json:"fpp"`
+		TPP **bool       `json:"tpp"`
+		// i *int            `json:"i"`
+		// s *string         `json:"s"`
+		// a *[]int          `json:"a"`
+		// o *map[string]int `json:"o"`
+
+		E LeptEvent `json:"E,omitempty"`
+		// subs []*SubStruct `json:"subs"`
+		// Subs []*SubStruct `json:"Subs"`
+		Subs []SubStruct `json:"Subs"`
+		// sub  *SubStruct   `json:"sub"`
+		// Sub *SubStruct    `json:"Sub"`
+		Sub SubStruct `json:"Sub"`
+
+		IO interface{} `json:"IO"`
+
+		C    chan struct{}            `json:"-"`
+		Func func(input string) error `json:"-"`
+
+		N interface{}    `json:"N"`
+		F bool           `json:"F"`
+		T bool           `json:"T"`
+		I int            `json:"I"`
+		S string         `json:"S"`
+		A []int          `json:"A"`
+		O map[string]int `json:"O"`
+		// O map[int]int `json:"O"`
+	}
+	structure := obj{}
+	buf, err := Marshal(structure)
+	if err != nil {
+		t.Errorf("Marshal empty obj err: %v", err)
+	}
+	// fmt.Println(string(buf))
+	T := true
+	sub := SubStruct{&T, []int{3, 2, 1}, map[string]int{"3": 3, "2": 2, "1": 1}}
+	TPP := true
+	tp := &TPP
+	tpp := &tp
+	FPP := false
+	fp := &FPP
+	fpp := &fp
+	input := obj{
+		NP:   nil,
+		FP:   fp,
+		FPP:  fpp,
+		TPP:  tpp,
+		E:    LeptParseOK,
+		Subs: []SubStruct{sub},
+		Sub:  sub,
+
+		IO: 10,
+
+		C:    make(chan struct{}, 0),
+		Func: func(input string) error { return nil },
+
+		N: 100,
+		F: false,
+		T: true,
+		I: 321,
+		S: "cba",
+		A: []int{3, 2, 1},
+		O: map[string]int{"3": 3, "2": 2, "1": 1},
+	}
+	buf, err = Marshal(input)
+	if err != nil {
+		t.Errorf("Marshal acutal obj err: %v", err)
+	}
+	// fmt.Println(string(buf))
+	v := NewLeptValue()
+	expectEQLeptEvent(t, LeptParseOK, LeptParse(v, string(buf)))
+	actual := LeptStringify(v)
+	// fmt.Println(actual)
+	expectEQString(t, string(buf), actual)
+}
 
 // example todo
 
