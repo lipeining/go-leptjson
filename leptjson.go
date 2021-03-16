@@ -3,6 +3,7 @@ package goleptjson
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -93,6 +94,15 @@ func (event LeptEvent) String() string {
 		return eventNames[event]
 	}
 	return "LeptParseError"
+}
+
+func (event *LeptEvent) UnmarshalJSON(b []byte) error {
+	var num int
+	if err := json.Unmarshal(b, &num); err != nil {
+		return err
+	}
+	*event = LeptEvent(num)
+	return nil
 }
 
 // LeptKeyNotExist object key not exist

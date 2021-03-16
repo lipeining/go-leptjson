@@ -1,6 +1,7 @@
 package goleptjson
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -1112,6 +1113,84 @@ func TestSetValue(t *testing.T) {
 	setValue(rv.Field(0))
 	fmt.Println("TestSetValue", rv)
 }
+func TestUnMarshal(t *testing.T) {
+	subStr := " { " +
+		"\"T\" : true , " +
+		"\"A\" : [ 1, 2, 3 ]," +
+		"\"O\" : { \"1\" : 1, \"2\" : 2, \"3\" : 3 }" +
+		" } "
+	subsStr := " [ " +
+		subStr +
+		" ] "
+	input := " { " +
+		"\"np\" : null , " +
+		"\"fp\" : false , " +
+		"\"fpp\" : false , " +
+		"\"tpp\" : true , " +
+		"\"E\" : 4, " +
+		"\"Subs\" : " + subsStr + ", " +
+		"\"Sub\" : " + subStr + ", " +
+		"\"IO\" : { \"1\" : 1, \"2\" : 2, \"3\" : 3 }, " +
+		"\"N\" : null , " +
+		"\"F\" : false , " +
+		"\"T\" : true , " +
+		"\"I\" : 123 , " +
+		"\"S\" : \"abc\", " +
+		"\"A\" : [ 1, 2, 3 ]," +
+		"\"O\" : { \"1\" : 1, \"2\" : 2, \"3\" : 3 }" +
+		" } "
+	type SubStruct struct {
+		T *bool          `json:"T"`
+		A []int          `json:"A"`
+		O map[string]int `json:"O"`
+	}
+	type obj struct {
+		NP  *interface{} `json:"np"`
+		FP  *bool        `json:"fp"`
+		FPP **bool       `json:"fpp"`
+		TPP **bool       `json:"tpp"`
+		// i *int            `json:"i"`
+		// s *string         `json:"s"`
+		// a *[]int          `json:"a"`
+		// o *map[string]int `json:"o"`
+
+		E LeptEvent `json:"E,omitempty"`
+		// subs []*SubStruct `json:"subs"`
+		// Subs []*SubStruct `json:"Subs"`
+		Subs []SubStruct `json:"Subs"`
+		// sub  *SubStruct   `json:"sub"`
+		// Sub *SubStruct    `json:"Sub"`
+		Sub SubStruct `json:"Sub"`
+
+		IO interface{} `json:"IO"`
+
+		C    chan struct{}
+		Func func(input string) error
+
+		N interface{}    `json:"N"`
+		F bool           `json:"F"`
+		T bool           `json:"T"`
+		I int            `json:"I"`
+		S string         `json:"S"`
+		A []int          `json:"A"`
+		O map[string]int `json:"O"`
+		// O map[int]int `json:"O"`
+	}
+	structure := obj{}
+	err := Unmarshal([]byte(input), &structure)
+	if err != nil {
+		t.Errorf("Unmarshal expect no err: %v", err)
+	} else {
+		fmt.Println(structure)
+	}
+	estruct := &obj{}
+	err = json.Unmarshal([]byte(input), estruct)
+	if err != nil {
+		t.Errorf("Unmarshal expect no err: %v", err)
+	} else {
+		fmt.Println(estruct)
+	}
+}
 func TestMarshal(t *testing.T) {
 	type SubStruct struct {
 		T *bool          `json:"T"`
@@ -1194,7 +1273,15 @@ func TestMarshal(t *testing.T) {
 	if err != nil {
 		t.Errorf("Marshal acutal obj err: %v", err)
 	}
-	// fmt.Println(string(buf))
+	ebuf, err := json.Marshal(input)
+	if err != nil {
+		t.Errorf("json.Marshal acutal obj err: %v", err)
+	}
+	if string(buf) != string(ebuf) {
+		t.Errorf("Marshal is not equal json.Marshal ")
+	}
+	fmt.Println(string(buf))
+	fmt.Println(string(ebuf))
 	v := NewLeptValue()
 	expectEQLeptEvent(t, LeptParseOK, LeptParse(v, string(buf)))
 	actual := LeptStringify(v)
